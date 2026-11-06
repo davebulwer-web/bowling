@@ -1,0 +1,1484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>body{margin:0}</style>
+</head>
+<body>
+<title>Lane Legends</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap">
+<style>
+/* Same frame as Oche Legends: one centred column, the pixel canvas as the hero, controls and help under it. Single dark bowling-alley theme by choice. */
+:root {
+  --wall: #0f0d16;
+  --panel: #1a1726;
+  --edge: #3a3352;
+  --chalk: #ece6d6;
+  --dim: #a39cb4;
+  --brass: #f2d34b;
+  --display: "Silkscreen", "Courier New", monospace;
+  --body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--wall); color: var(--chalk); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 20px 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 16px; }
+header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 16px; }
+h1 { font-family: var(--display); font-weight: 400; font-size: 28px; margin: 0; letter-spacing: 1px; color: var(--brass); }
+.tag { color: var(--dim); font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; }
+.screen { display: flex; justify-content: center; background: #000; border: 4px solid var(--edge); border-radius: 2px; min-width: 0; }
+canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; max-width: 100%; height: auto; touch-action: manipulation; }
+.bar { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
+.group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.label { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dim); margin-right: 4px; }
+button, .seg label { font-family: var(--display); font-size: 14px; background: var(--panel); color: var(--chalk); border: 2px solid var(--edge); padding: 6px 12px; cursor: pointer; border-radius: 2px; }
+button:hover, .seg label:hover { border-color: var(--brass); }
+button:focus-visible, .seg input:focus-visible + label { outline: 2px solid var(--brass); outline-offset: 2px; }
+.seg { display: flex; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { margin-left: -2px; }
+.seg input:checked + label { background: var(--brass); color: #0f0d16; border-color: var(--brass); }
+.pad { display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(2, 44px); gap: 4px; }
+.pad button { padding: 0; font-size: 16px; }
+.bowl { height: 92px; min-width: 120px; font-size: 18px; background: #5a1c3a; border-color: #a33a6a; }
+.touch { display: flex; gap: 16px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.help { color: var(--dim); font-size: 14px; max-width: 72ch; margin: 0; }
+.help kbd { font-family: var(--display); font-size: 12px; color: var(--chalk); background: var(--panel); border: 1px solid var(--edge); padding: 0 5px; border-radius: 2px; }
+.small { font-size: 12px; padding: 4px 8px; }
+@media (hover: hover) and (pointer: fine) { .touch { display: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Lane Legends</h1>
+    <span class="tag">Ten pin bowling for 1 or 2 players</span>
+  </header>
+
+  <div class="screen" id="screen"><canvas id="game" width="320" height="200" aria-label="Bowling game screen"></canvas></div>
+
+  <div class="bar">
+    <div class="group">
+      <span class="label">New game</span>
+      <button id="newCpu" type="button">Vs computer</button>
+      <button id="new2" type="button">2 players</button>
+      <button id="newPrac" type="button">Practice</button>
+      <button id="menuBtn" type="button">Menu</button>
+    </div>
+    <div class="group">
+      <span class="label">Meter speed</span>
+      <div class="seg" role="radiogroup" aria-label="Meter speed">
+        <input type="radio" name="speed" id="sp-easy" value="1.6"><label for="sp-easy">Easy</label>
+        <input type="radio" name="speed" id="sp-league" value="1.2" checked><label for="sp-league">League</label>
+        <input type="radio" name="speed" id="sp-pro" value="0.85"><label for="sp-pro">Pro</label>
+      </div>
+    </div>
+    <div class="group">
+      <button id="mute" type="button" aria-pressed="false">Sound on</button>
+      <button id="unlock" type="button" class="small">Unlock all opponents</button>
+    </div>
+  </div>
+
+  <div class="touch" aria-label="Touch controls">
+    <div class="pad">
+      <span></span>
+      <button type="button" data-dir="0,-1" aria-label="Switch between position and aim">&#8593;</button>
+      <span></span>
+      <button type="button" data-dir="-1,0" aria-label="Left">&#8592;</button>
+      <button type="button" data-dir="0,1" aria-label="Switch between position and aim">&#8595;</button>
+      <button type="button" data-dir="1,0" aria-label="Right">&#8594;</button>
+    </div>
+    <button type="button" class="bowl" id="bowlBtn">Bowl</button>
+  </div>
+
+  <p class="help">Each ball takes four presses, like the old home-computer bowling games. Slide your bowler along the approach with <kbd>&larr;</kbd> <kbd>&rarr;</kbd> and press <kbd>Space</kbd>. Move the yellow arrow to the lane mark you want to roll over and press <kbd>Space</kbd>. Stop the power bar: more power is a faster ball that hooks less. Your bowler starts their run-up; stop the spin needle before they let go. Left of centre hooks the ball left into the 1-3 pocket, right of centre backs it up. <kbd>&uarr;</kbd> <kbd>&darr;</kbd> switch between position and aim before you bowl. The pins are a physics simulation, so the same line can carry or leave a corner pin. Beat each opponent to unlock the next. Keys: <kbd>Esc</kbd> menu, <kbd>1</kbd> vs computer, <kbd>2</kbd> two players, <kbd>P</kbd> practice, <kbd>M</kbd> mute.</p>
+</div>
+<script>
+(() => {
+'use strict';
+const W = 320, H = 200;
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const PORTRAIT_DATA = {"jordan": "data:image/png;base64,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", "fergus": "data:image/png;base64,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", "carl": "data:image/png;base64,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", "pavan": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAIFElEQVR42tWYfWwT9xnHP45wF4RTYRyHxK+p44AmiCaPvOB0pixdaAebWqSQaSpiAjGxSZMmIcQqqqpDUzV1f1TaVmlCYo06dVIX2B9oK7TNyFCjYV7CPOZNk4njYp9zSeMY0+WAUK/J/rj8jrMdB9tJUHuSdXe+u+f3fJ/X7/MzfHY3zRf5qOILfqxaSeHO+qY5/X0sesVgNFmWdQ3DSoWQs75prjvQisdlJpbIkIiGiYzfz3lHmhg1fC4A5FsaYGPDl4inFRKZewC4zKtxW0za8+1d2zjx+4Ele6ViAFkljcfbPgfQHWgFIBEN5yidfwS8Vu06nlYIdPgZGBpekicqBuCsb5qrfiybY+FiiueDcHlbGLocBMBtMREZv18xiIoAOOub5ibv/Fe7F+ExFE2VLEN8E08rSwJRVYnyh17ozvlPWF4fIi7z6kXliG8E8O5A64K5tCJ94K1TZwusGU8rBYovBkL/LOC1aiG1ogBEadTHulBEhIN4lsjcI5G591BPxNPKoom/7B7It5RQVHhgIcsXAyEUF8pXEkZlAyhmKbfFtOCzYu/rFX9kjSy/+hSz8kKKlVJm69Y8XnYlWjYulK+cvvPqE3yH18QHUaXgm4bmHXwmX/p8kDmhaGdjNR7LamLpagCMZhc3qOfUM5/w70iEvtCM1ju6mv7HgLzCbFSaGDUsFkZ65fduMbP1ya8A4JVlxqZXc/ZajLcu/Z235nOmq7mGjWY4eTXFN/0eBoaGV74TLwZANLKNZvW+s7Ga7duexrb2DvLtNfwtPEJUGgegeWsXAOeCMYCKOVFFIRTwWgtow8E2VfmTV1MMzf8XyViB8+xodWFvfx7CIwyOTAMwNnWGp3wb8Ljq5xujkaySplxmWjYAEUb5gPZuMbPvDxIH26x0NlYTV4wMjkxz8eYMF2/ewH7hN3idDZqHju3bhX3zJmZvycQS/orCZ0kjZQ5l8Lbw9rUMO7xq1TlwSqLv0jgbzRDJgL22hmNHf6jSkB/v4ti+XTTYzLDOQdU6Gx6XmTd/9RIeb/tcVkkjfssKQC9Qmhg1zHxq1GJ+6HIQe20N9toaIhk1nF7d81X2bjHT1VyD25Rl9pZM73efx755U67gdQ422s3cTo6s3ExczBoubwsBwgxFU+zc4uHG5D12bvFgXe/AtvYOUzLE0gm1WtxNwjobs7fyauWtJJGxzKPflZAmRg0DQ8NaxQFwVj1IbPn2GqIfqfcey2qmZJnZWzJ//Nc09s2bGJczjH34Pv84/34BuwVKTuZV5VhfXOuF22trCHjhyDvX+dk3zNybSmCbR5UA4oqRvlAGyNDVPM7gyDTngi0komG6mmsW5UuPpBO39RzC/d4bHDgl8TLMK3UdgLevZYhkyCm5Kq1QZ+e++WkM0AZ8OTOLzVy1sgBEvRYl9fWjvXDqJEPRFEPRFIMiuecVF935Kd8GnmxppsFm5p+hMEfeuV50DF3I2xXlQDEBYgFpYtRw+Bf9vPBs14OZIZrSCNzBNiv7tzbQ2VhNVBrn5XcTjMuZHJInqpmcmVXXnAyVnAdlJbFYQJzzE3oxSv3Tv0xx/FyMRDQMwNlrMe2dyPh9YtErBndWDb3gx5aCNZYMwDgZwmauQs7MIieTCyb5zKfGgu9OXk0xODKN22LSAH7vl+/Sd0nlRMJzxsmQqngyiX99evnKqF5BvfJyZlZ75qxvmpMmRpEmRvnzb18rHEPnc0MfXsL6A0PDxKJXCkhcqYlcXgjpLC8nkwyHEwXvXL58hYDXmrPFkh9W4ly35nF1a3He+uIQ16XQiSVtr9scDi1Ws0qagf436ehoJ55W2O+r5mCbtehArw+dYiG7LGXUaLKQVdI5FtJ7QcTrhbNn1J2FVheBDj9x5SadjWqjG5uaJpJRq84Or4lj+3bRF57OsfaKU4liiaVXwOT0AfD9wy8yNqUq+HX3Kjobq9nvq+Z333Hy6xf30mAzc2HwQ1WuX/1GkUL416fLSuCyGtlClkoG+3OUF4u3trhQfnCEyffe0LiQ9wkrtTYbc4LY6Y3j9xF3OBgI/ilHzoqROUUKcf70CRz+Xhz+3gcVq85Htk61aHfvAR7b/Iw6Ez/xIKENd5NMyXIOCRRVp7v3ADaHg+DHFk3OsgDQN5Xzp09gcvr4yfFX6d3dM9e7u2dOny/67rnn8M9JNmwj+lGKWpstR6a9tkYrwXEppa3hdlrx+31cOHumpE5c0lAfl1J8rW1rwZZfLHolpwmJyuR2WolLKa3sJoP99Hg+YUp+MAtcmPmy5r3e3T0sINswHE5oOVIxADH/vn60l/Y9h7UGo7eOqNei0SlSCJPThyKFtPxIBvvZXv0fAD4YTlD37I/UePf7FhzmnfVNGk2pKImF4tLEKFklzWuvvMSe7HWy+IoSPrdJDYFsi0t90OLCOBliYDiEw9/LX08fJ5tJEFeMeJy+RQmjWFenh6HkHNBTA4DhcIKOjvaC3vAwBms0qcm4wf9tFCmEs+cVLt6cITrXiM3hoFUAXUSO0KPYrnVJSZwM9tPd6lqQJxUDogfhdlrZvvM5/OvTbP/Wc3hcZmzmqkWTNC6lcs7LUkZFadPH7MO8keO1Op+WuKXOvHr+texcyGiyoC+BDwNiNFlKalJZJb18bDQupVjraC5Ks23mqhyKXaoXS+07D8uTqlJcmB//RpNFmweMJguKFNJitZRdtad7DpU1e5cNQF+ybA5HgdWyShq306qBMDl9yMlkSZ4oJfaFHP27xcro/wFG6C/busAD8QAAAABJRU5ErkJggg==", "bhups": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAJhElEQVR42r2Za2xb9RnGf/bcNm6cqie20+T4lrhuvagLIaJJ7DQtaVE7BmODiaJtICGKGGxCm8b4UIYmbdNAfACkwSZNQmxIgJDSat2XXWg1YLRN0jRVV6JQpXUdYjsnJY7rKnFitHTxPpz8T47vdlr2SpEdn9t7ed7nvRzDfxcTCFlKrX7Xi5Jc5ssWWTLm/bbOYi17nbHcBf8P5W/mOSb9P8UiUK30dgYyp84OGXo7A5lCx0+dHTJUcp+lVKJsFAx6COUaUo1XlFiMN159iRMnRzI165f44j/rmFmYyzrHLZnZ3R3kxMmRLEMKwadSGBmLKV9V+GMx+g4c4N1/fKD9NrMwh1syZykfSaaJhEapWb+Ev2kDvZ2BjBKLlY1CKZ2MNwuX194Zou/AAQAaajdlACLJNPpPvREnQ3EATobizCzM8dADD2ZuJs+MxbxfyU2VWIzfvXhIU35mYY6ZhTkaajflnRtJpvMMc0tmZhbm6O0MZH7f/2lFrFM2B6rBf29nIDOzMGcQyguY6D3usVqYTKTyoqGXhtpNzG1oNHxy6i94XPasBBb6FDPOdDNM42/aANObMj/cY2OvpxGAcCLNwGdfcGfHdrY3mLmto41Pzo/yt3NhpmbnATgeUg1qqN2EFjXIvPbOkOGV5+7LU7hUZAyFClml3vc3baBv3x5+/nU3hsXsZMxsdGKsl6HeCcByaFh94GKMWUXhjY+m+dXfwxrcBPTCoWFDNVAy5VJWJSykp71iyuclW72sGgJYfU6ek2NMzc5r0RAyMhohGLSuPYkr8b7wUN++PXnH9MovX1PgWkz90xlirJcxOLu4s2O7lisiD85cTBWl01uSA7Jk1G72WFtdnvfzorEY04wSURCw2t6g1omVomdgYY7U2LvA7ooLmrFa5QG8vq7Mkw/vp0mWKqO6xcLFyr7FicdqEfjPAFh2PLz2OlAtD08rybLnZDY6yWx0YliMqZDSyacbWzUICelutRSFS6HfjYW8XKg3Eb8JI7u7u6oyVsBIy4scEVGQnc6iLUQhB5uqgY5e3jvyPpHQKAD7ttVxzx1e2v2rkJpVFGyynMdCetm/0817vjYmE4MAfEUO0NsZyESvXjGsiUbLtRF6D3jdEj5DHVOz83xweZ6p2Qs8Mivha1Er6fGRCAOfXeJ4KIXHamHftjp8riYe+t79WhKL+5w8o37ft/UGJ5R8uAh6X1MEcqEjxO+Q6Gnbw/rFy4Qm4oQTacKJNL4WsMkyXqvatPU01wgEs5SM8O9/vs/tBx9XYVTvxO+QijpLGFGqNpmKKa0kl7Ogk9ubZKYu8ujbl5hMqLx9wGfBYavDJssreL+gXbvD76fdL5HZ6GRaSTL18fs4vrYj65lv/2AXu9rcfCPoxdW4tWIYmYpZXgj3S6kEXl9X5o+vPY994gQvf7dd63Ectjr2ekxaC2G2uRk4d0GttEei7PbZ8UvwyB0SgV3t2j176m/wWKCJvVshNDZAZtmeB9mqI1AM+/ob2bc4Wb94mSf6mpia9+KoS68ma72T2zraeAJw2MJ4LEvs8Pu5raMNY73M8jUFA2hs5HM1EZqIE9jVjnk8WdWAZapmItPngbx5ATarzGIDZpV0HuvcfpdMu394hZEkMnpGqnfCtRhNssQutvHRxxF8igKYb81AU61Mzec/WBQuvWH6VkIcb5IlvFYzNlkm3rK/Kn2KVuJyTZ1yvVb7PnT6QlYNEMolVlrovGp8Laa118Z6mU/Oj9K9/16U67Uc+vEL3HQd0Buhb94AolevGFyNWzNDL32HWUX1oK/FztDpC/ha7NgYJnNN0QqXCp9VIwAysWHQVeZ2vwov0VpUs50oWcj0TCTYqVBYQxNxPpy8QTgRASIMfPYFj9yxWtT0RhTqp+TN6uehw28SDg0bqoGyqdQ8oK8FuTeNfx4jPRvH12InumwHpplMrWNqdp6e5hqiy3YC8moUCkVCNHSBp15Qx9HQsKHa3MubyGTyh5rcogZwaSaNywgfXkGjwqVkBI+lhh1+P466tAaxUt3socNvltzU6WG8plZCGJNrhMHRinnJTEg3rPc01+C1mrOYaWx8HK/VrMHJoBtwcjG/lv1Q1WsV/VDzysNthKLTeCxLGnyEOGx1qhErkPr+twJZrfW0kiRw+M8V7UmL9WMlIyD6oULi9XVlAC7RSIslgtdqxmsFPKuJK7j/wniSsfHxrPZ6Wknyi79G1rx2rxhC4mIluYx+09x/7ChnLqY4eWYUJFi3fBWXUWWid85doqe5hgM7VSMcdWnSOlgp12s5PXoZr7ux4rV7KSPKrteFt/uPHVWNcjoRC9nmZheWLW0w9goAez0mLQr66qun08hEHLATjiTpP3ZUW8Xfkt1oIeX7jx3l1Nkhdra52dnmzppdxafB0Up02U44kc6ayJTrtUzNm5maNxOaiBOaiGO2ufnX+Ut43RKy08nPXnyLYu8RKkluUzHvC+WDwY6s42o4V6MgO53IB59h+MirTEanmUzdILryvFD0YwA8liWNiabmYTwJ93d34XHZ6W6NcerskGZEtdEwlfK83uP5ueHEtWV1CdV18Bk2O7fxo2d/ieeyykZ+aZVaBYzGxsfxS+o8LBzgcdmJXr3C4OD5koYUqgXGYuEKBjtKbodlyUh3qwVZMuJx2bVEe/TgPfglVXlBpfqWYzK1jr5vfpvBz61MRuNZx4PBDsKhYS03KumHjEXebxXsgfKM0K1ADr8+wPN/ukzSdi/3P/UsDlsdHstSlvLhRJplVwfO4EP85Nf9PPObI+S+oVlnsRIMdmTBqhQLFTwidvSFRs2soUYyMjIa4fDrA7i2bGb3nh7t2N6f/mGlPpi1tfuE1MVdDz7Jy28NsntPD83NLortQj0uu2ZEqSTWKrGYd0+dHcoyoNhyKbdi6z155mKK7lYLscF++moucnwkQsPdTzOW2kZ3q0U7Lj4FURSSyWic3s6A1sqXNWDlRAp1qbJkzIqAPiLFDAq/8TgNdz+NxdWhQU44aDIaLxjt3EgPDp5nZ5sbr68rzxAjgKtxa0Ywj155vfcLtRaF3qKIhBbKxnt/y/bgfXnKF4NqKQmHholevYKrcauW4KaVHUweI+iVEvhXYrG8KBQ732NRo/DA/q9WrWwxsiiYxMLjQrncxWpuDijJ5YqHf8Hx1Xo69/4el52R0UhlLFQoafWYLPdi+lZIuQiX3ErkJumtWLmsVfSwLgYjYzkGEP+LBC7G21+26COvZ6H/AYTe9gPOL47qAAAAAElFTkSuQmCC", "ekow": "data:image/png;base64,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", "andy": "data:image/png;base64,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", "dave": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAJXElEQVR42tWZX0xb9xXHP/awMqiRsIlDsK9N49g4hDDmNcF1WtL8Ec1C2mbRCC/ZpA51i6pJWdVW0aRuD9PUPlRTtVWrtPSh7R76MMLEqlZRUqssI4UAIUMZTRzAIcO+vsQYMBIudCGz93C513awwZCAtJ+EbF9+99zzPX++5/zO1fx3bor/56VdL8HWrduT6d/Tfz/KVbDWGxfiU+j0pep3AJ2+VFX8g3ffUL+/c6aZEsGJdev25GigT6Pc9yiWZrUhpCibbdkddckP3n2D3t4+ACq5SyA0TsLqBsBlMfDq260ApAPJJjNfkCsCyGbpXMqfOtmANjSgXgtPzgIwFAOXQb5m2VxMwurm7Mc+FUgumfmAWBbAcgrnUj48OctQbOmesak4AM869ACUu/cBcPZj30OBKHjYGLQ76pLvnGlmpKeDjhHZ4i6DbGnFC5bNxXQsgvg8sAiEThXEuiRxPtZXlL/02ScMxeBnBytpOlyXsWdckt3RGBE5f22U8OQsnwdkIM/Sub5JvBIIu6Mu+fK+zXzYM85br5zkxD5Xzr2JaUl+4JzIucsSb5z7JwD1Hi++y/05w2jdQkiJ+46OzkzljUJq07SYKjhGM4lpiWSRwIl6+dqP3+8iGBhcn0KWTwhpQwMcdBbLyhuFTOUfBLMIQllP1Th5aY+Jsak4DfW7sTvqko8UwHKuU2I/kHycX750LAV6i5uFLe68Hmwu+ZqfHq4FoHBqcOM9UCI4OeK1y1Z90PIPrhz/N5UJPOvQM19aw6mTDWvywkP1Qmro5KN8jn3PuCvlghaMrcmQBWtJ3tb2tsVf15ffPC1mVTxZJKCZE9VcGGZ2Y7vReFq7kB7/uokBdBMDOcEoVJq+ohERl8WQ0wPr0o3qrW4ZhD2F/1vdZwkvFq1ysyHFOItUmpiW1KImJ3FK3lA4ht1m2BgAo4E+jcJC50QoERLMiCOquGTYT2WkkFqXiEaoIzEtMRXoI3AnSihhQmOpIhn2A3BgOwxPwGgwsXEA1DgO+7kQ3EQw8Al//sVRLPsOE+68SFcYhifmebc/gd3Ww/iA3C7sf+4Y6aX2QnAT73ek6NNu27exADSWKuzEOOI9Btyn9b0/ciG4icKpYZ5xV3LEa2ekp4OhGBx0FpMM+/nHwLDKPA7Nv8FRw+XeK/zkyXKclg32wF7jfX64y8Zfv5rFsqua5l3VNBsFEoE+xqUYHw7G+NWZl2n84iLnr43yVI2TpsN1jEsxugZHOFBRQCJh4Pu27xEIjW/8mTgaEZdy/bSI1mjGsqsal8UARgFTmaAmdnobYaveK5+XtVEq9AsbfyZWFDvxg0P4+oNpiZxW5BYZ6EBFAW0X+9BYqtRHJsN+nttSyPwkjMV17BGc6wNA4fWcPc60SMNuG+y2ZeV7c8nXBIET9WaSRcWpHLKbmZQkApNQoV+g5fSb8jl5YiDvfiqvEFqNsESgj2jf3zKuSTOP4dhmoqfr+pKOFCCUMKEz2NYvhBQP5LJMYlpCu/ipmRMpdciJGh0YxFQmcKnzC8biOhqfsKOZE0nkodRqvLCqJE5vEyy7qtXKqig/KclFK3ijm/nJoJro4clZbgwN0dN1Hc2cqO4NzxYCYPC8sOyz1gwgmxDdxACjgT6N9bnfZjDLpCTxeX+QwJ0ojm0mHNtMzE8GqXa52Pv4twH4+9h9zl2WT2X3ipzMTwYBMuL/kdCo0sKu5MZxKaZ2lcryNBzlXpGTe0VOCjfbGJ6Yzxw5aqMqDYcSplVbfFU5kEuocv1mURXM+DEjEp4tpNrlQms0U542jTiwHcKzLizF82rIpIOWqXUdTmQrrVD3WU3L6Te5WVSFNPOYWhsUCjWXfA1A4E4US3HKC8MT81wfiqmeefXtVkLdZzUbXsgAWtvbNM3Hm5LvnGkmOTFPdFsVFqNWTmqhju8USWjmDCqdjnxTQCDUAZQD8NrHg4Q++7XmYXRYswd8/UHMgvBAKMhthdZRl3H6ShYJavVV5qUXgptkEL5SfP3BVYXwQwHw9QcZ09Vy4baJCqtJPeDvNd5n55w/a/JrjWa6pwsYZqs6clTmQU37Bf70xTe89pf5nECWOxevCsCVSCkNzS2YDanbQndva1pOv0nX4AjlZgPhzovobn2KbzTBuBRjXIpxrnOIkZ4OKrlL4xN2FmJBbI4aAHbX2FQgequb31/atATIciOegnwV93rdeO259xg8LzAu+bHsqgZg55yfaERUk9VhLadyi8xCOoMNuyFVQ+o9NfT64xxv2MFxAWAHviufyj3WAyP+VXtgTFeL1+teYhFrWQljoah6bX/jMT4cnFVZqNxswFQmULmlUP1T2KhySyEeTypPPFX6Jc+t9D6fM6Tym8xNDDCmq1XjfAmNRmZ4es+T6rsvnb6UQ02naLvYJ/dHRrMKotZloNZl4F6RE1OZfEbY33hMHdPsrrERisyosiusJswGLZXe5+kfDK6NRuWwSSmf7SVda3ub6p2F+BRmQSDueYF/Dfj47iGzWtSSLIbLTEydWCwAr731EaHIjDqRa/1DSvaXV3vyotcl4/WF+BT9g0F219gyXtqF7t7O2PNe603V/b1++aXF5d5BXn/RSzw0wM65VD6kj9e1RjMLO2TL/u6jK9R7avBU6TMoucJqwrp1uwpEEsUlYbysB5qPNyXTWCZDcSWZXmmpV3PAQ+oBbZdETv/oebrPjbD3qxsZDV96DvX6b/L6i16ViRS5iszW9jbMgsDTe55UDKjJC4DdUZf88mpP1tiXYgkq0vJN2aN8/rx5J++13qTddwuPt5mutt9QGSnMOBePlR1luPUDwKlaPRfDmA1avrzagySKWLduT2YDkQFg8T1u1kKi05dSYTUxFormTGydvlQNh3bfLSyWKs73dND4RGrP8Myn3Ig7Od6wA7NBm1X5hfgUvf44ZkE+/qSH14osJMUSS4Tq9KWqayVRXDapvF43kijySks9dSdeZU/TKc5fG2V4Yp7u6QJV+VxGUHRQPPBIW4l03l/25YUgqJ5qaG4hYXUTCI3T85+9Gcpns77ZoEUSRUKRmbzeE+cNoMJqQhJFlXFW2pu+DjWdIpB8HGtZybKWTyV4fEmhzBvAcm5TYjEfwelylPuyVdxs8R+KzOCp0q8YrkuSOHT3tmYsFE1W6LMLlq13K78BQJr7K6ymvKfPSvwrwNt9twhFZnLS6P8AGsU0hxyO/q8AAAAASUVORK5CYII="};
+
+// ---------- lane physics (metres, seconds; x right of the bowler, z down the lane) ----------
+const LANE_HALF = 0.527, GUTTER_W = 0.235, WALL_X = LANE_HALF + GUTTER_W;
+const HEAD_Z = 18.288, DECK_END = 19.3, PIT_Z = 19.9;
+const ARROWS_Z = 4.57, OIL_END = 11.0, DRY_FULL = 13.0;
+const BALL_R = 0.109, BALL_M = 7.0;
+const PIN_R = 0.0605, PIN_M = 1.53, PIN_H = 0.38, PIN_LR = 0.048, PIN_HL = 0.17;
+const PIN_I = PIN_M * (2 * PIN_HL) * (2 * PIN_HL) / 12;
+const HOOK_K = 0.9, KNOCK_V = 0.32;
+const E_BALL = 0.7, E_PIN = 0.55, E_WALL = 0.45;
+const ROW = 0.3048 * Math.sqrt(3) / 2;
+const SPOTS = [
+  [0, 0], [-0.1524, ROW], [0.1524, ROW], [-0.3048, 2 * ROW], [0, 2 * ROW], [0.3048, 2 * ROW],
+  [-0.4572, 3 * ROW], [-0.1524, 3 * ROW], [0.1524, 3 * ROW], [0.4572, 3 * ROW],
+].map(([x, dz]) => ({ x, z: HEAD_Z + dz }));
+
+function makePins(standing) {
+  return SPOTS.map((s, i) => {
+    const up = !standing || standing[i];
+    const pos = standing && standing[i] && typeof standing[i] === 'object' ? standing[i] : s;
+    return { n: i + 1, x: pos.x, z: pos.z, vx: 0, vz: 0, st: up ? 'up' : 'gone', th: 0, w: 0, phi: 0, dphi: 0, wob: 0, wobT: 0 };
+  });
+}
+function makeBall(x0, aimX, speed, spin) {
+  const z0 = 0.3, dx = aimX - x0, dz = ARROWS_Z - z0, l = Math.hypot(dx, dz);
+  return { x: x0, z: z0, vx: speed * dx / l, vz: speed * dz / l, spin, gutter: false, done: false, dist: 0, t: 0 };
+}
+function hookRamp(z) { return z < OIL_END ? 0.06 : z > DRY_FULL ? 1 : 0.06 + 0.94 * (z - OIL_END) / (DRY_FULL - OIL_END); }
+
+function stepBall(b, dt) {
+  if (b.done) return;
+  b.t += dt;
+  const sp = Math.hypot(b.vx, b.vz) || 1;
+  if (!b.gutter) {
+    // the ball's side rotation bites in the dry back end and drags it across the lane
+    const a = -b.spin * HOOK_K * hookRamp(b.z);
+    b.vx += a * dt;
+    const dec = (b.z < OIL_END ? 0.15 : 0.45) * dt;
+    b.vx -= b.vx / sp * dec; b.vz -= b.vz / sp * dec;
+    if (Math.abs(b.x) > LANE_HALF + 0.01 && b.z < DECK_END) { b.gutter = true; b.vx = 0; b.x = Math.sign(b.x) * (LANE_HALF + GUTTER_W / 2); }
+  } else {
+    b.vx = 0; b.x += (Math.sign(b.x) * (LANE_HALF + GUTTER_W / 2) - b.x) * 0.2;
+  }
+  b.x += b.vx * dt; b.z += b.vz * dt; b.dist += sp * dt;
+  if (Math.abs(b.x) > WALL_X - BALL_R) { b.x = Math.sign(b.x) * (WALL_X - BALL_R); b.vx = -b.vx * 0.3; }
+  if (b.z > PIT_Z || b.vz < 0.05 && b.z > HEAD_Z) b.done = true;
+}
+
+// Ball path only, no pins: where it is when it reaches depth z. Used by the computer to plan.
+function ballAt(x0, aimX, speed, spin, zTarget) {
+  const b = makeBall(x0, aimX, speed, spin);
+  for (let i = 0; i < 4000 && b.z < zTarget && !b.done; i++) stepBall(b, 1 / 240);
+  return { x: b.x, gutter: b.gutter, ang: Math.atan2(b.vx, b.vz) };
+}
+
+// segment of a toppling or fallen pin: base point and unit direction
+function pinSeg(p) {
+  if (p.st === 'down') { const ux = Math.sin(p.th), uz = Math.cos(p.th); return { ax: p.x - ux * PIN_HL, az: p.z - uz * PIN_HL, bx: p.x + ux * PIN_HL, bz: p.z + uz * PIN_HL, r: PIN_LR }; }
+  const ux = Math.sin(p.th), uz = Math.cos(p.th), l = PIN_H * Math.sin(p.phi);
+  return { ax: p.x, az: p.z, bx: p.x + ux * l, bz: p.z + uz * l, r: PIN_LR };
+}
+function closestOnSeg(s, px, pz) {
+  const dx = s.bx - s.ax, dz = s.bz - s.az, l2 = dx * dx + dz * dz;
+  let t = l2 > 1e-9 ? ((px - s.ax) * dx + (pz - s.az) * dz) / l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return { x: s.ax + dx * t, z: s.az + dz * t, t };
+}
+function segSeg(s1, s2) {
+  // closest points between two segments (sampled refine: good enough for short pins)
+  let best = null;
+  const tryP = (px, pz, seg, flip) => {
+    const c = closestOnSeg(seg, px, pz), d = Math.hypot(px - c.x, pz - c.z);
+    if (!best || d < best.d) best = flip ? { d, p1x: c.x, p1z: c.z, p2x: px, p2z: pz } : { d, p1x: px, p1z: pz, p2x: c.x, p2z: c.z };
+  };
+  for (let k = 0; k <= 4; k++) {
+    const t = k / 4;
+    tryP(s1.ax + (s1.bx - s1.ax) * t, s1.az + (s1.bz - s1.az) * t, s2, false);
+    tryP(s2.ax + (s2.bx - s2.ax) * t, s2.az + (s2.bz - s2.az) * t, s1, true);
+  }
+  return best;
+}
+
+// body helpers: mass, inertia, velocity at a point, impulse
+function bodyOf(o, isBall) {
+  if (isBall) return { o, m: BALL_M, I: Infinity, cx: o.x, cz: o.z, rot: false };
+  if (o.st === 'down') return { o, m: PIN_M, I: PIN_I, cx: o.x, cz: o.z, rot: true };
+  return { o, m: PIN_M, I: Infinity, cx: o.x, cz: o.z, rot: false };
+}
+function velAt(B, px, pz) {
+  const o = B.o; let vx = o.vx, vz = o.vz;
+  if (B.rot) { const rx = px - B.cx, rz = pz - B.cz; vx += -o.w * rz; vz += o.w * rx; }
+  if (o.st === 'tip') {
+    // the top of a toppling pin sweeps outward as it falls
+    const s = Math.hypot(px - o.x, pz - o.z) / PIN_H, sp = PIN_H * Math.cos(o.phi) * o.dphi * Math.min(1, s / Math.max(0.05, Math.sin(o.phi)));
+    vx += Math.sin(o.th) * sp; vz += Math.cos(o.th) * sp;
+  }
+  return { vx, vz };
+}
+function contact(A, B, px, pz, nx, nz, pen, e, world) {
+  const va = velAt(A, px, pz), vb = velAt(B, px, pz);
+  const rvn = (vb.vx - va.vx) * nx + (vb.vz - va.vz) * nz;
+  const raxn = A.rot ? (px - A.cx) * nz - (pz - A.cz) * nx : 0;
+  const rbxn = B.rot ? (px - B.cx) * nz - (pz - B.cz) * nx : 0;
+  const k = 1 / A.m + 1 / B.m + (A.rot ? raxn * raxn / A.I : 0) + (B.rot ? rbxn * rbxn / B.I : 0);
+  if (rvn < 0) {
+    const j = -(1 + e) * rvn / k;
+    A.o.vx -= j * nx / A.m; A.o.vz -= j * nz / A.m; if (A.rot) A.o.w -= j * raxn / A.I;
+    B.o.vx += j * nx / B.m; B.o.vz += j * nz / B.m; if (B.rot) B.o.w += j * rbxn / B.I;
+    // a little tangential friction makes pins spin off each other
+    const tx = -nz, tz = nx, rvt = (vb.vx - va.vx) * tx + (vb.vz - va.vz) * tz;
+    const jt = Math.max(-0.25 * j, Math.min(0.25 * j, -rvt / k));
+    A.o.vx -= jt * tx / A.m; A.o.vz -= jt * tz / A.m; B.o.vx += jt * tx / B.m; B.o.vz += jt * tz / B.m;
+    if (A.rot) A.o.w -= jt * ((px - A.cx) * tz - (pz - A.cz) * tx) / A.I;
+    if (B.rot) B.o.w += jt * ((px - B.cx) * tz - (pz - B.cz) * tx) / B.I;
+    if (world && world.onHit) world.onHit(j, A.o, B.o);
+    A.o.hit = B.o.hit = true;
+  }
+  // push apart
+  const corr = Math.max(0, pen - 0.001) * 0.6 / (1 / A.m + 1 / B.m);
+  A.o.x -= corr * nx / A.m; A.o.z -= corr * nz / A.m; B.o.x += corr * nx / B.m; B.o.z += corr * nz / B.m;
+}
+
+function knockCheck(p, rng) {
+  if (p.st !== 'up' || !p.hit) return;
+  p.hit = false;
+  const sp = Math.hypot(p.vx, p.vz);
+  if (sp > KNOCK_V) {
+    p.st = 'tip'; p.th = Math.atan2(p.vx, p.vz) + (rng() - 0.5) * 0.3;
+    p.phi = 0.12; p.dphi = Math.min(14, 2.5 + sp * 1.4);
+    p.vx *= 0.75; p.vz *= 0.75;
+  } else if (sp > 0.03) {
+    p.wob = Math.min(1, (p.wob || 0) + sp * 4); p.wobT = 0; p.wobDir = Math.atan2(p.vx, p.vz); p.vx *= 0.4; p.vz *= 0.4;
+  }
+}
+
+function stepWorld(W, dt) {
+  const { ball, pins, rng } = W;
+  if (ball) stepBall(ball, dt);
+  for (const p of pins) {
+    if (p.st === 'gone') continue;
+    p.x += p.vx * dt; p.z += p.vz * dt;
+    const sp = Math.hypot(p.vx, p.vz);
+    const fr = (p.st === 'up' ? 6 : p.st === 'tip' ? 2.0 : 2.4) * dt;
+    if (sp > fr) { p.vx -= p.vx / sp * fr; p.vz -= p.vz / sp * fr; } else { p.vx = 0; p.vz = 0; }
+    if (p.st === 'down' || p.st === 'pit') { p.th += p.w * dt; p.w *= Math.max(0, 1 - 2.5 * dt); }
+    if (p.st === 'tip') {
+      p.dphi += 38 * Math.sin(p.phi) * dt; p.phi += p.dphi * dt;
+      if (p.phi >= 1.42) {
+        // lying down: the body centre moves out along the fall direction
+        p.st = 'down'; p.x += Math.sin(p.th) * PIN_HL; p.z += Math.cos(p.th) * PIN_HL;
+        const tip = PIN_H * p.dphi * 0.35;
+        p.vx += Math.sin(p.th) * tip * 0.5; p.vz += Math.cos(p.th) * tip * 0.5;
+        p.w = (rng() - 0.5) * 6;
+      }
+    }
+    if (p.st === 'up' && p.wob > 0) { p.wobT += dt; p.wob *= Math.max(0, 1 - 2.2 * dt); if (p.wob < 0.02) p.wob = 0; }
+    // side kickbacks and the back of the pit
+    const r = p.st === 'up' ? PIN_R : PIN_LR;
+    if (Math.abs(p.x) > WALL_X - r) { p.x = Math.sign(p.x) * (WALL_X - r); if (p.vx * Math.sign(p.x) > 0) p.vx = -p.vx * E_WALL; }
+    if (p.st === 'up' && (Math.abs(p.x) > LANE_HALF - 0.02 || p.z > DECK_END)) { p.st = 'tip'; p.th = Math.atan2(p.vx || Math.sign(p.x), p.vz || 0.01); p.phi = 0.2; p.dphi = 3; }
+    if (p.z > PIT_Z - 0.05) { p.z = PIT_Z - 0.05; if (p.vz > 0) p.vz = -p.vz * 0.2; }
+    if (p.z > DECK_END + 0.08 && (p.st === 'down' || p.st === 'tip')) { if (p.st === 'tip') { p.x += Math.sin(p.th) * PIN_HL; p.z += Math.cos(p.th) * PIN_HL; } p.st = 'pit'; p.w = p.w || (rng() - 0.5) * 8; }
+  }
+  // collisions
+  const act = pins.filter(p => p.st !== 'gone' && p.st !== 'pit');
+  for (let it = 0; it < 2; it++) {
+    if (ball && !ball.done && !ball.gutter && ball.z > HEAD_Z - 1) {
+      const B = bodyOf(ball, true);
+      for (const p of act) {
+        if (p.st === 'gone') continue;
+        const P = bodyOf(p, false);
+        if (p.st === 'up') {
+          const dx = p.x - ball.x, dz = p.z - ball.z, d = Math.hypot(dx, dz);
+          if (d < BALL_R + PIN_R && d > 1e-6) contact(B, P, ball.x + dx / d * BALL_R, ball.z + dz / d * BALL_R, dx / d, dz / d, BALL_R + PIN_R - d, E_BALL, W);
+        } else {
+          const s = pinSeg(p), c = closestOnSeg(s, ball.x, ball.z), dx = c.x - ball.x, dz = c.z - ball.z, d = Math.hypot(dx, dz);
+          if (d < BALL_R + s.r && d > 1e-6) contact(B, P, c.x, c.z, dx / d, dz / d, BALL_R + s.r - d, E_BALL, W);
+        }
+      }
+    }
+    for (let i = 0; i < act.length; i++) for (let j = i + 1; j < act.length; j++) {
+      const a = act[i], b = act[j];
+      if (a.st === 'gone' || b.st === 'gone') continue;
+      if (Math.abs(a.x - b.x) > 0.8 || Math.abs(a.z - b.z) > 0.8) continue;
+      const A = bodyOf(a, false), Bb = bodyOf(b, false);
+      if (a.st === 'up' && b.st === 'up') {
+        const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
+        if (d < 2 * PIN_R && d > 1e-6) contact(A, Bb, a.x + dx / d * PIN_R, a.z + dz / d * PIN_R, dx / d, dz / d, 2 * PIN_R - d, E_PIN, W);
+      } else if (a.st === 'up' || b.st === 'up') {
+        const up = a.st === 'up' ? a : b, ly = up === a ? b : a, U = up === a ? A : Bb, L = up === a ? Bb : A;
+        const s = pinSeg(ly), c = closestOnSeg(s, up.x, up.z), dx = up.x - c.x, dz = up.z - c.z, d = Math.hypot(dx, dz);
+        if (d < PIN_R + s.r && d > 1e-6) contact(L, U, c.x, c.z, dx / d, dz / d, PIN_R + s.r - d, E_PIN, W);
+      } else {
+        const s1 = pinSeg(a), s2 = pinSeg(b), q = segSeg(s1, s2);
+        if (q && q.d < s1.r + s2.r && q.d > 1e-6) {
+          const nx = (q.p2x - q.p1x) / q.d, nz = (q.p2z - q.p1z) / q.d;
+          contact(A, Bb, (q.p1x + q.p2x) / 2, (q.p1z + q.p2z) / 2, nx, nz, s1.r + s2.r - q.d, E_PIN, W);
+        }
+      }
+    }
+  }
+  for (const p of act) knockCheck(p, rng);
+  W.t += dt;
+}
+
+function worldSettled(W) {
+  if (W.ball && !W.ball.done && W.ball.z < PIT_Z && !(W.ball.gutter && W.ball.z > DECK_END)) return false;
+  return W.pins.every(p => p.st === 'gone' || p.st === 'pit' || (p.st !== 'tip' && Math.hypot(p.vx, p.vz) < 0.04 && (p.st !== 'down' || Math.abs(p.w) < 0.3) && !(p.wob > 0.05)));
+}
+function mulberry(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function makeWorld(standing, ball, rng) { return { pins: makePins(standing), ball, rng: rng || Math.random, t: 0, onHit: null }; }
+// run a whole delivery without drawing (computer planning and tests)
+function simulate(standing, x0, aimX, speed, spin, rng) {
+  const W = makeWorld(standing, makeBall(x0, aimX, speed, spin), rng);
+  let after = 0;
+  for (let i = 0; i < 240 * 12; i++) {
+    stepWorld(W, 1 / 240);
+    if (W.ball.z > HEAD_Z - 0.5 || W.ball.done) after += 1 / 240;
+    if (after > 0.6 && worldSettled(W)) break;
+    if (after > 6) break;
+  }
+  return W;
+}
+
+// ---------- the 8 bowlers ----------
+// look: from-behind sprite details. style: how the computer bowls. sig*: how wobbly the computer is.
+const BOWLERS = [
+  { id: 'jordan', avg: 100, name: 'JORDAN', nick: 'THE ROOKIE',     skin: '#f2c09a', hair: '#8a5a32', hairStyle: 'mop',     shirt: '#ecebe6', shirt2: '#c9c8c2', trim: null,      legs: '#3a4a6a', specs: false, extra: null,      ball: '#2fb8b0', ball2: '#1a7a76',
+    power: 0.45, spin: 0.15, sigAim: 0.060, sigPos: 0.040, sigPow: 0.10, sigSpin: 0.14, spare: 1.0 },
+  { id: 'fergus', avg: 115, name: 'FERGUS', nick: 'COOL HAND',      skin: '#f0b890', hair: '#c8823a', hairStyle: 'slick',   shirt: '#1f2a4a', shirt2: '#151d34', trim: '#d0408a', legs: '#2a2a33', specs: true,  extra: null,      ball: '#d83a3a', ball2: '#8a1e1e',
+    power: 0.70, spin: 0.35, sigAim: 0.044, sigPos: 0.030, sigPow: 0.08, sigSpin: 0.11, spare: 0.9 },
+  { id: 'carl', avg: 135,   name: 'CARL',   nick: 'THE REGULAR',    skin: '#f0b890', hair: '#6a4226', hairStyle: 'short',   shirt: '#7ab0e0', shirt2: '#5a8cbc', trim: null,      legs: '#33343c', specs: false, extra: 'lanyard', ball: '#3aa860', ball2: '#1f6a3a',
+    power: 0.55, spin: 0.30, sigAim: 0.034, sigPos: 0.024, sigPow: 0.07, sigSpin: 0.09, spare: 0.85 },
+  { id: 'pavan', avg: 150,  name: 'PAVAN',  nick: 'THE PROFESSOR',  skin: '#a86a45', hair: '#15100c', hairStyle: 'curly',   shirt: '#f0f0f0', shirt2: '#cfcfcf', trim: null,      legs: '#2c2c36', specs: true,  extra: null,      ball: '#8a3ad8', ball2: '#4e1e8a',
+    power: 0.60, spin: 0.55, sigAim: 0.027, sigPos: 0.019, sigPow: 0.06, sigSpin: 0.07, spare: 0.8 },
+  { id: 'bhups', avg: 160,  name: 'BHUPS',  nick: 'THE SPARE MAN',  skin: '#c08a5a', hair: '#15100c', hairStyle: 'neat',    shirt: '#f2f2f2', shirt2: '#d2d2d2', trim: '#c8407a', legs: '#2a2a30', specs: false, extra: 'badge',   ball: '#e0a020', ball2: '#9a6a10',
+    power: 0.62, spin: 0.40, sigAim: 0.022, sigPos: 0.016, sigPow: 0.05, sigSpin: 0.06, spare: 0.45 },
+  { id: 'ekow', avg: 170,   name: 'EKOW',   nick: 'THE AMBASSADOR', skin: '#6e4128', hair: null,      hairStyle: 'bald',    shirt: '#8fa8c8', shirt2: '#6f88a8', trim: '#f4f4f4', legs: '#3c4a66', specs: false, extra: 'suit',    ball: '#2a2a3a', ball2: '#111118',
+    power: 0.66, spin: 0.85, sigAim: 0.016, sigPos: 0.012, sigPow: 0.04, sigSpin: 0.045, spare: 0.6 },
+  { id: 'andy', avg: 175,   name: 'ANDY',   nick: 'THE GAFFER',     skin: '#eaa888', hair: '#c8c0b8', hairStyle: 'baldtop', shirt: '#24305a', shirt2: '#18203e', trim: null,      legs: '#2a2a30', specs: false, extra: null,      ball: '#e06a20', ball2: '#9a4410',
+    power: 0.85, spin: 0.20, sigAim: 0.013, sigPos: 0.010, sigPow: 0.035, sigSpin: 0.04, spare: 0.6 },
+  { id: 'dave', avg: 195,   name: 'DAVE',   nick: 'TURKEY TIME',    skin: '#f0b890', hair: '#a8a49c', hairStyle: 'short',   shirt: '#f2f2f2', shirt2: '#d0d0d0', trim: '#24305a', legs: '#2a2a33', specs: true,  extra: 'stripes', ball: '#1a5ad8', ball2: '#f2f2f2',
+    power: 0.72, spin: 0.60, sigAim: 0.008, sigPos: 0.006, sigPow: 0.024, sigSpin: 0.024, spare: 0.4 },
+];
+const speedOf = p => 5.6 + 4.0 * p;   // power 0..1 -> 5.6..9.6 m/s (about 12 to 21 mph)
+
+// ---------- scoring ----------
+// frames: [{ rolls: [n, ...], split: [bool, ...] }]
+function frameDone(frames, i, last) {
+  const f = frames[i]; if (!f) return false;
+  const r = f.rolls;
+  if (i < last) return r[0] === 10 || r.length === 2;
+  if (r.length < 2) return false;
+  if (r[0] === 10 || r[0] + r[1] === 10) return r.length === 3;
+  return true;
+}
+function scoreCard(frames, nFrames) {
+  const rolls = []; frames.forEach(f => rolls.push(...f.rolls));
+  const out = []; let total = 0, k = 0;
+  for (let i = 0; i < nFrames; i++) {
+    const f = frames[i]; if (!f) { out.push({ total: null }); continue; }
+    let val = null;
+    if (i < nFrames - 1) {
+      if (f.rolls[0] === 10) { if (rolls.length > k + 2) val = 10 + rolls[k + 1] + rolls[k + 2]; k += 1; }
+      else if (f.rolls.length === 2) { const s = f.rolls[0] + f.rolls[1]; if (s === 10) { if (rolls.length > k + 2) val = 10 + rolls[k + 2]; } else val = s; k += 2; }
+      else k += f.rolls.length;
+    } else if (frameDone(frames, i, nFrames - 1)) val = f.rolls.reduce((a, b) => a + b, 0);
+    if (val !== null && (i === 0 || out[i - 1].total !== null)) { total += val; out.push({ total }); } else out.push({ total: null });
+  }
+  return out;
+}
+function frameMarks(f, last) {
+  if (!f) return [];
+  const r = f.rolls, m = [], num = (n, i) => n === 0 ? '-' : String(n);
+  if (!last) {
+    if (r[0] === 10) return ['', 'X'];
+    if (r.length) m.push(num(r[0], 0));
+    if (r.length > 1) m.push(r[0] + r[1] === 10 ? '/' : num(r[1], 1));
+    return m;
+  }
+  if (r.length > 0) m.push(r[0] === 10 ? 'X' : num(r[0]));
+  if (r.length > 1) m.push(r[0] === 10 ? (r[1] === 10 ? 'X' : num(r[1])) : (r[0] + r[1] === 10 ? '/' : num(r[1])));
+  if (r.length > 2) {
+    if (r[0] === 10 && r[1] !== 10) m.push(r[1] + r[2] === 10 ? '/' : num(r[2]));
+    else m.push(r[2] === 10 ? 'X' : num(r[2]));
+  }
+  return m;
+}
+
+// split: head pin down and the standing pins fall into separate groups
+function isSplit(standing) {
+  if (standing[0]) return false;
+  const up = []; standing.forEach((s, i) => { if (s) up.push(i); });
+  if (up.length < 2) return false;
+  const seen = new Set([up[0]]), q = [up[0]];
+  while (q.length) {
+    const a = q.pop();
+    for (const b of up) if (!seen.has(b) && Math.hypot(SPOTS[a].x - SPOTS[b].x, SPOTS[a].z - SPOTS[b].z) < 0.32) { seen.add(b); q.push(b); }
+  }
+  return seen.size < up.length;
+}
+
+// ---------- computer planning ----------
+function gauss() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// Find the aim point at the arrows that sends the ball through (tx, tz).
+function solveAim(x0, speed, spin, tx, tz) {
+  let lo = -0.52, hi = 0.52;
+  const f = a => ballAt(x0, a, speed, spin, tz);
+  for (let i = 0; i < 22; i++) {
+    const mid = (lo + hi) / 2, r = f(mid);
+    const x = r.gutter ? (r.x < 0 ? -1 : 1) : r.x;
+    if (x < tx) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+// standing: array of 10 (falsy or truthy) for the pins left on the deck
+function cpuPlan(o, standing, skillScale = 1) {
+  const full = standing.every(Boolean);
+  let power = o.power, spin = o.spin, tx, tz, x0;
+  if (full) {
+    tx = 0.062; tz = HEAD_Z;
+    x0 = clamp(0.12 + spin * 0.30, -0.4, 0.42);
+  } else {
+    // spares: go straighter, find the front pin and clip it on the side that sends it into the rest
+    spin = o.spin * 0.25; power = Math.min(1, o.power + 0.1);
+    const up = []; standing.forEach((s, i) => { if (s) up.push(typeof s === 'object' ? { x: s.x, z: s.z } : { x: SPOTS[i].x, z: SPOTS[i].z }); });
+    up.sort((a, b) => a.z - b.z);
+    const key = up[0], rest = up.slice(1);
+    let off = 0;
+    if (rest.length) {
+      const mx = rest.reduce((a, p) => a + p.x, 0) / rest.length;
+      if (Math.abs(mx - key.x) > 0.04) off = -Math.sign(mx - key.x) * 0.075;
+      else off = key.x > 0.02 ? 0.03 : -0.03;
+    }
+    tx = clamp(key.x + off, -0.47, 0.47); tz = key.z - 0.05;
+    // cross-lane angle for corner pins
+    x0 = clamp(-tx * 0.7 + spin * 0.25, -0.42, 0.42);
+  }
+  const speed = speedOf(power);
+  const aim = solveAim(x0, speed, spin, tx, tz);
+  const k = skillScale * (full ? 1 : o.spare);
+  return {
+    x0: clamp(x0 + gauss() * o.sigPos * k, -0.45, 0.45),
+    aim: clamp(aim + gauss() * o.sigAim * k, -0.5, 0.5),
+    power: clamp(power + gauss() * o.sigPow * k, 0, 1),
+    spin: clamp(spin + gauss() * o.sigSpin * k, -1, 1),
+  };
+}
+
+// ---------- palette ----------
+const C = {
+  black: '#100c09', outline: '#1a0e08', chalk: '#ece6d6', chalkDim: '#97a59c', yellow: '#f2d34b', cyan: '#5fd3e0', red: '#d8443a',
+  bannerBg: '#100c09', panel: '#141a26', panelEdge: '#3a4a66', panelLine: '#26324a', p1: '#f2d34b', p2: '#5fd3e0',
+  pinWhite: '#f6f3ec', pinShade: '#b8b2a8', pinRed: '#c8302a', pinRedLight: '#e85a4a',
+  shoeA: '#c03a2a', shoeB: '#e8e2d0', sole: '#2a1a14',
+};
+
+// ---------- 3x5 pixel font ----------
+const FONT = {
+'0':'111101101101111','1':'010110010010111','2':'111001111100111','3':'111001111001111','4':'101101111001001',
+'5':'111100111001111','6':'111100111101111','7':'111001001010010','8':'111101111101111','9':'111101111001111',
+'A':'010101111101101','B':'110101110101110','C':'011100100100011','D':'110101101101110','E':'111100110100111',
+'F':'111100110100100','G':'011100101101011','H':'101101111101101','I':'111010010010111','J':'001001001101010',
+'K':'101101110101101','L':'100100100100111','M':'101111111101101','N':'110101101101101','O':'010101101101010',
+'P':'110101110100100','Q':'010101101110011','R':'110101110101101','S':'011100010001110','T':'111010010010010',
+'U':'101101101101111','V':'101101101101010','W':'101101111111101','X':'101101010101101','Y':'101101010010010',
+'Z':'111001010100111',' ':'000000000000000','-':'000000111000000','!':'010010010000010','.':'000000000000010',
+':':'000010000010000','/':'001001010100100','?':'110001010000010',"'":'010010000000000','>':'100010001010100',
+'+':'000010111010000','%':'101001010100101','<':'001010100010001'
+};
+function textWidth(s, sc = 1) { return s.length ? (s.length * 4 - 1) * sc : 0; }
+function drawTextOn(c2, s, x, y, color, sc = 1, align = 'left') {
+  s = String(s).toUpperCase();
+  const w = textWidth(s, sc);
+  if (align === 'center') x -= Math.floor(w / 2);
+  if (align === 'right') x -= w;
+  c2.fillStyle = color;
+  for (let i = 0; i < s.length; i++) {
+    const g = FONT[s[i]] || FONT['?'];
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++)
+      if (g[r * 3 + c] === '1') c2.fillRect(x + (i * 4 + c) * sc, y + r * sc, sc, sc);
+  }
+}
+const drawText = (s, x, y, color, sc, align) => drawTextOn(ctx, s, x, y, color, sc, align);
+const px = (x, y, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, 1, 1); };
+const rect = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+function fillCircle(c2, cx, cy, r, col) {
+  c2.fillStyle = col;
+  if (r < 0.8) { c2.fillRect(Math.round(cx), Math.round(cy), 1, 1); return; }
+  const y0 = Math.round(cy - r), y1 = Math.round(cy + r);
+  for (let y = y0; y <= y1; y++) {
+    const dy = y + 0.5 - cy, h = r * r - dy * dy; if (h < 0) continue;
+    const w = Math.sqrt(h), x0 = Math.round(cx - w), x1 = Math.round(cx + w);
+    if (x1 > x0) c2.fillRect(x0, y, x1 - x0, 1); else c2.fillRect(Math.round(cx), y, 1, 1);
+  }
+}
+const hex3 = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const shadeHex = (h, k) => { const [r, g, b] = hex3(h); const f = v => Math.max(0, Math.min(255, Math.round(v * k))).toString(16).padStart(2, '0'); return '#' + f(r) + f(g) + f(b); };
+
+// ---------- portraits (the caricatures as 48 x 48 pixel art) ----------
+const portraits = [], silhouettes = [];
+BOWLERS.forEach((o, i) => {
+  const img = new Image();
+  img.onload = () => {
+    const mk = () => { const c = document.createElement('canvas'); c.width = 48; c.height = 48; return c; };
+    const c = mk(); c.getContext('2d').drawImage(img, 0, 0); portraits[i] = c;
+    const s = mk(), q = s.getContext('2d'); q.drawImage(img, 0, 0);
+    const d = q.getImageData(0, 0, 48, 48);
+    for (let k = 0; k < d.data.length; k += 4) if (d.data[k + 3]) { d.data[k] = 46; d.data[k + 1] = 38; d.data[k + 2] = 32; }
+    q.putImageData(d, 0, 0); silhouettes[i] = s;
+  };
+  img.src = PORTRAIT_DATA[o.id];
+});
+
+// ---------- bowler sprites, seen from behind (40 x 72, feet at the bottom centre) ----------
+const SPR_W = 40, SPR_H = 72, FOOT = 71;
+const POSES = ['ready', 'push', 'back', 'slide', 'follow', 'cheer', 'slump'];
+function buildSprite(o, pose) {
+  const c = document.createElement('canvas'); c.width = SPR_W; c.height = SPR_H;
+  const g = c.getContext('2d');
+  const parts = [];   // [kind, ...] drawn in order: everything gets an outline pass first
+  const R = (x, y, w, h, col) => parts.push(['r', x, y, w, h, col]);
+  const B = (x, y, r, col, col2) => parts.push(['c', x, y, r, col, col2]);
+  const L = (x0, y0, x1, y1, t, col) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) || 1; for (let i = 0; i <= n; i++) R(Math.round(x0 + (x1 - x0) * i / n - t / 2), Math.round(y0 + (y1 - y0) * i / n), t, 1, col); };
+  const low = pose === 'slide' || pose === 'follow' ? 5 : 0;
+  const sleeve = o.extra === 'suit' ? o.shirt : o.shirt, cuff = o.extra === 'stripes' ? o.trim : null;
+  const arm = (x0, y0, x1, y1) => {   // upper arm in sleeve, forearm in skin (suits keep the sleeve)
+    const mx = Math.round(x0 + (x1 - x0) * 0.45), my = Math.round(y0 + (y1 - y0) * 0.45);
+    L(x0, y0, mx, my, 4, sleeve);
+    L(mx, my, x1, y1, 3, o.extra === 'suit' ? sleeve : o.skin);
+    if (o.extra === 'suit') R(x1 - 1, y1, 3, 2, o.skin);
+  };
+  const ballBehind = pose === 'ready' || pose === 'push';
+  // ---- ball held in front (behind the body from our view)
+  if (pose === 'ready') B(28, 33, 5, o.ball, o.ball2);
+  if (pose === 'push') B(29, 41, 5, o.ball, o.ball2);
+  // ---- legs
+  const ly = 42 + low;
+  if (pose === 'slide' || pose === 'follow') {
+    R(13, ly, 7, 16, o.legs); R(14, ly + 16, 6, 6, o.legs);                 // left leg, bent and sliding ahead
+    R(12, ly + 21, 9, 3, C.shoeB); R(12, ly + 24, 9, 1, C.sole); R(17, ly + 21, 4, 3, C.shoeA);
+    L(24, ly + 2, 7, 67, 6, o.legs);                                          // right leg swept behind to the left
+    R(3, 66, 8, 3, C.shoeB); R(3, 69, 8, 1, C.sole); R(3, 66, 3, 3, C.shoeA);
+  } else {
+    const stepL = pose === 'back' ? 4 : 0, stepR = pose === 'push' ? 4 : 0;
+    R(13, ly, 7, 24 - stepL, o.legs); R(21, ly, 7, 24 - stepR, o.legs);
+    R(12, 66 - stepL, 8, 4, C.shoeB); R(12, 70 - stepL, 8, 1, C.sole); R(12, 66 - stepL, 3, 4, C.shoeA);
+    R(21, 66 - stepR, 8, 4, C.shoeB); R(21, 70 - stepR, 8, 1, C.sole); R(26, 66 - stepR, 3, 4, C.shoeA);
+  }
+  // ---- arms that are behind or beside the body
+  const ty = 18 + low;
+  if (pose === 'ready') { arm(10, ty + 2, 12, ty + 15); arm(30, ty + 2, 29, ty + 14); }
+  if (pose === 'push') { arm(10, ty + 2, 7, ty + 17); arm(30, ty + 2, 30, ty + 20); }
+  if (pose === 'back') { arm(10, ty + 2, 5, ty + 14); }
+  if (pose === 'slide') { arm(10, ty + 2, 1, ty + 4); arm(30, ty + 2, 30, ty + 22); }
+  if (pose === 'follow') { arm(10, ty + 2, 1, ty + 5); }
+  if (pose === 'cheer') { arm(10, ty + 2, 4, ty - 15); arm(30, ty + 2, 36, ty - 15); }
+  if (pose === 'slump') { arm(10, ty + 2, 10, ty + 19); arm(30, ty + 2, 30, ty + 19); }
+  // ---- torso
+  R(10, ty, 21, 6, o.shirt); R(11, ty + 6, 19, 12, o.shirt); R(12, ty + 18, 17, 6, o.shirt);
+  R(12, ty + 24, 17, 2, o.legs);
+  // ---- head
+  const hy = 3 + low + (pose === 'slump' ? 2 : 0);
+  R(18, hy + 12, 5, 4, o.skin);                        // neck
+  R(15, hy + 1, 11, 12, o.skin); R(16, hy, 9, 1, o.skin); R(16, hy + 13, 9, 1, o.skin);
+  R(14, hy + 6, 1, 3, o.skin); R(26, hy + 6, 1, 3, o.skin);   // ears
+  // ---- arms in front of the body
+  if (pose === 'back') { arm(30, ty + 2, 33, ty + 16); B(33, ty + 20, 6, o.ball, o.ball2); }
+  if (pose === 'follow') { arm(30, ty + 2, 33, hy - 3); }
+  if (pose === 'slide') B(31, 64, 5, o.ball, o.ball2);
+  // outline pass, then fill pass
+  for (const p of parts) {
+    g.fillStyle = C.outline;
+    if (p[0] === 'r') g.fillRect(p[1] - 1, p[2] - 1, p[3] + 2, p[4] + 2); else fillCircle(g, p[1], p[2], p[3] + 1, C.outline);
+  }
+  for (const p of parts) {
+    if (p[0] === 'r') { g.fillStyle = p[5]; g.fillRect(p[1], p[2], p[3], p[4]); }
+    else { fillCircle(g, p[1], p[2], p[3], p[5]); fillCircle(g, p[1] + 1, p[2] + 1, p[3] - 1.5, p[5]); fillCircle(g, p[1] + 1.5, p[2] + 1.5, p[3] * 0.55, p[4]); fillCircle(g, p[1] - p[3] * 0.4, p[2] - p[3] * 0.4, 1, '#ffffff'); }
+  }
+  // ---- details (no outline)
+  const D = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  // shirt shading and seams
+  D(11, ty + 6, 2, 12, o.shirt2); D(28, ty + 6, 2, 12, o.shirt2); D(12, ty + 18, 17, 1, o.shirt2);
+  D(12, ty + 23, 17, 1, o.shirt2);
+  // collar
+  if (o.extra !== 'suit') { D(16, ty - 1, 9, 2, o.shirt2); }
+  if (o.extra === 'suit') { D(17, ty - 1, 7, 2, o.trim); D(20, ty + 14, 1, 10, o.shirt2); D(10, ty, 21, 1, o.shirt2); }
+  if (o.extra === 'stripes') { D(16, ty - 1, 9, 1, o.trim); }
+  if (o.extra === 'lanyard') { D(16, ty - 1, 9, 1, '#c04a8a'); D(15, ty, 1, 1, '#c04a8a'); D(25, ty, 1, 1, '#c04a8a'); }
+  if (o.trim && o.id === 'fergus') { D(11, ty + 1, 1, 22, o.trim); D(29, ty + 1, 1, 22, o.trim); }
+  if (o.trim && o.id === 'bhups') { /* name badge is on the front */ }
+  if (cuff) {
+    // the navy bands round the sleeves of the polo
+    const bands = { ready: [[8, ty + 7], [30, ty + 7]], push: [[7, ty + 8], [29, ty + 8]], back: [[6, ty + 7], [30, ty + 8]], slide: [[5, ty + 3], [29, ty + 10]], follow: [[5, ty + 3], [30, ty - 2]], cheer: [[6, ty - 6], [32, ty - 6]], slump: [[9, ty + 9], [29, ty + 9]] }[pose];
+    bands.forEach(([x, y]) => D(x, y, 4, 1, cuff));
+  }
+  // hair and head details
+  const hs = o.hairStyle, hc = o.hair, hl = hc ? shadeHex(hc, 1.35) : null;
+  if (hs === 'short' || hs === 'neat') { D(15, hy, 11, hs === 'neat' ? 9 : 10, hc); D(16, hy - 1, 9, 1, hc); D(14, hy + 2, 1, 4, hc); D(26, hy + 2, 1, 4, hc); D(18, hy + 1, 4, 1, hl); if (hs === 'short') { D(16, hy + 10, 2, 1, hc); D(23, hy + 10, 2, 1, hc); } }
+  if (hs === 'mop') { D(14, hy - 1, 13, 11, hc); D(15, hy - 2, 11, 1, hc); D(14, hy + 10, 2, 2, hc); D(17, hy + 10, 2, 1, hc); D(21, hy + 10, 3, 2, hc); D(25, hy + 10, 2, 2, hc); D(17, hy, 5, 1, hl); D(23, hy + 2, 2, 1, hl); }
+  if (hs === 'slick') { D(15, hy - 1, 11, 9, hc); D(14, hy + 2, 1, 5, hc); D(26, hy + 2, 1, 5, hc); D(16, hy + 8, 9, 2, shadeHex(hc, 0.75)); D(16, hy + 1, 4, 1, hl); D(21, hy + 2, 3, 1, hl); D(17, hy + 4, 5, 1, hl); D(19, hy + 6, 3, 1, shadeHex(hc, 0.85)); }
+  if (hs === 'curly') {
+    D(12, hy - 2, 17, 13, hc); D(13, hy - 3, 15, 1, hc); D(11, hy + 1, 1, 8, hc); D(29, hy + 1, 1, 8, hc); D(13, hy + 11, 4, 1, hc); D(19, hy + 11, 3, 1, hc); D(24, hy + 11, 4, 1, hc);
+    [[14, hy], [18, hy - 1], [22, hy], [26, hy + 2], [15, hy + 5], [20, hy + 4], [24, hy + 6], [17, hy + 8], [22, hy + 9]].forEach(([x, y]) => D(x, y, 2, 1, '#3a3028'));
+  }
+  if (hs === 'bald') { D(18, hy + 2, 3, 1, shadeHex(o.skin, 1.5)); D(19, hy + 3, 1, 1, shadeHex(o.skin, 1.5)); D(16, hy + 10, 9, 1, shadeHex(o.skin, 0.8)); }
+  if (hs === 'baldtop') { D(14, hy + 5, 13, 5, hc); D(15, hy + 10, 11, 1, hc); D(18, hy + 1, 3, 1, shadeHex(o.skin, 1.2)); }
+  if (o.specs) { D(14, hy + 5, 2, 1, '#151515'); D(25, hy + 5, 2, 1, '#151515'); }
+  D(17, hy + 13, 7, 1, shadeHex(o.skin, 0.8));   // neck shadow
+  return c;
+}
+const sprites = BOWLERS.map(o => Object.fromEntries(POSES.map(p => [p, buildSprite(o, p)])));
+// where the ball sits in each pose, relative to the sprite's top left
+const BALL_IN_POSE = { ready: [28, 33], push: [29, 41], back: [33, 38], slide: [31, 64] };
+
+// ---------- the lane, drawn a row at a time in perspective ----------
+const FOC = 330, HY = 54, CX = 160;
+const CAM_AIM = { x: 0, y: 1.5, z: -6 }, CAM_PINS_Z = 13.6;
+const cam = { x: 0, y: 1.5, z: -6 };
+const PITCH = 2 * WALL_X + 0.2, BOARD = 2 * LANE_HALF / 39;
+const floorImg = ctx.createImageData(W, H), fbuf = new Uint32Array(floorImg.data.buffer);
+const boardTone = Array.from({ length: 39 }, (_, i) => 0.93 + ((i * 37 + 11) % 7) * 0.018);
+const COL = {
+  lane: [218, 172, 112], deck: [232, 196, 140], approach: [176, 126, 78], mark: [92, 44, 26], foul: [150, 30, 30],
+  gutter: [88, 90, 100], gutterDark: [48, 50, 58], cap: [40, 30, 50], capTop: [70, 54, 86], pit: [10, 8, 10], fog: [20, 14, 24],
+};
+const ARROW_X = [5, 10, 15, 20, 25, 30, 35].map(b => LANE_HALF - (b - 0.5) * BOARD);
+const DOT_X = [3, 5, 8, 11, 14, 26, 29, 32, 35, 37].map(b => LANE_HALF - (b - 0.5) * BOARD);
+function floorColour(xw, z, zLo, zHi, colW, out) {
+  const k = Math.round(xw / PITCH), xl = xw - k * PITCH, ax = Math.abs(xl);
+  let c, r, g, b;
+  if (z > DECK_END) { c = COL.pit; }
+  else if (ax > WALL_X) { c = ax > WALL_X + 0.03 ? COL.cap : COL.capTop; }
+  else if (z < 0) {
+    // approach: the boards run the full width up to the foul line
+    const bd = Math.min(38, Math.max(0, Math.floor((xl + LANE_HALF) / BOARD)));
+    const t = ax > LANE_HALF ? 0.85 : boardTone[bd];
+    c = COL.approach; r = c[0] * t; g = c[1] * t; b = c[2] * t;
+    if ((zHi > -3.7 && zLo < -3.62) || (zHi > -4.6 && zLo < -4.52)) for (const dx of DOT_X) if (Math.abs(xl - dx) < Math.max(0.02, colW * 0.6)) { c = COL.mark; r = null; }
+    if (zHi > -0.04 && zLo < 0.0 && ax <= WALL_X) { c = COL.foul; r = null; }
+  } else if (ax > LANE_HALF) {
+    const t = (ax - LANE_HALF) / GUTTER_W, d = 1 - Math.abs(t - 0.5) * 2;
+    const m = COL.gutter, n = COL.gutterDark;
+    r = m[0] + (n[0] - m[0]) * d; g = m[1] + (n[1] - m[1]) * d; b = m[2] + (n[2] - m[2]) * d;
+    if (zHi > 0 && zLo < 0.04) { c = COL.foul; r = null; }
+  } else {
+    const bd = Math.min(38, Math.max(0, Math.floor((xl + LANE_HALF) / BOARD)));
+    const t = boardTone[bd];
+    c = z > HEAD_Z - 0.75 ? COL.deck : COL.lane;
+    // a faint sheen down the middle of the oiled front of the lane
+    const sh = z < OIL_END ? 1 + 0.06 * Math.max(0, 1 - ax / 0.35) : 1;
+    r = c[0] * t * sh; g = c[1] * t * sh; b = c[2] * t * sh;
+    if (zHi > 0 && zLo < 0.04) { c = COL.foul; r = null; }
+    else if (zHi > 2.1 && zLo < 2.16) { for (const dx of DOT_X) if (Math.abs(xl - dx) < Math.max(0.014, colW * 0.6)) { c = COL.mark; r = null; } }
+    else if (zHi > 4.25 && zLo < 4.95) {
+      for (let i = 0; i < 7; i++) {
+        const z0 = 4.3 + (3 - Math.abs(i - 3)) * 0.1, u = (z - z0) / 0.36;
+        if (u >= 0 && u <= 1 && Math.abs(xl - ARROW_X[i]) < Math.max(BOARD * 0.75 * (1 - u), colW * 0.5)) { c = COL.mark; r = null; }
+      }
+    } else if (z > HEAD_Z - 0.1) {
+      for (const s of SPOTS) if (Math.abs(xl - s.x) < Math.max(0.02, colW * 0.5) && zHi > s.z - 0.02 && zLo < s.z + 0.02) { r *= 0.8; g *= 0.8; b *= 0.8; }
+    }
+  }
+  if (r === null || r === undefined) { r = c[0]; g = c[1]; b = c[2]; }
+  if (k !== 0) { r *= 0.72; g *= 0.72; b *= 0.74; }
+  out[0] = r; out[1] = g; out[2] = b;
+}
+const tmpC = [0, 0, 0];
+function renderFloor() {
+  for (let y = 0; y < H; y++) {
+    const row = y * W;
+    if (y <= HY) {
+      const t = y / HY, r = 14 + 10 * t, g = 10 + 6 * t, b = 22 + 12 * t;
+      const v = (255 << 24) | (b << 16) | (g << 8) | r;
+      for (let x = 0; x < W; x++) fbuf[row + x] = v;
+      continue;
+    }
+    const depth = FOC * cam.y / (y + 0.5 - HY), z = cam.z + depth;
+    const zHi = cam.z + FOC * cam.y / Math.max(0.01, y - HY), zLo = cam.z + FOC * cam.y / (y + 1 - HY);
+    const colW = depth / FOC;
+    const fog = Math.max(0, Math.min(0.6, (depth - 10) / 28));
+    for (let x = 0; x < W; x++) {
+      const xw = cam.x + (x + 0.5 - CX) * colW;
+      floorColour(xw, z, zLo, zHi, colW, tmpC);
+      const r = (tmpC[0] + (COL.fog[0] - tmpC[0]) * fog) | 0, g = (tmpC[1] + (COL.fog[1] - tmpC[1]) * fog) | 0, b = (tmpC[2] + (COL.fog[2] - tmpC[2]) * fog) | 0;
+      fbuf[row + x] = (255 << 24) | (b << 16) | (g << 8) | r;
+    }
+  }
+  ctx.putImageData(floorImg, 0, 0);
+}
+function proj(x, y, z) {
+  const d = z - cam.z; if (d < 0.4) return null;
+  const s = FOC / d;
+  return { sx: CX + (x - cam.x) * s, sy: HY + (cam.y - y) * s, s, d };
+}
+// the masking units over the pit, one per lane, with the lane numbers
+const MY_LANE = 7;
+function drawMasking() {
+  const dw = PIT_Z + 0.05 - cam.z; if (dw < 0.5) return;
+  const s = FOC / dw, yTop = Math.round(HY - (2.7 - cam.y) * s), yBot = Math.round(HY + (cam.y - 0.5) * s);
+  for (let k = -5; k <= 5; k++) {
+    const x0 = Math.round(CX + (k * PITCH - PITCH / 2 - cam.x) * s), x1 = Math.round(CX + (k * PITCH + PITCH / 2 - cam.x) * s);
+    if (x1 < 0 || x0 > W) continue;
+    const w = x1 - x0, h = yBot - yTop, dim = k === 0 ? 1 : 0.7;
+    rect(x0, yTop, w, h, shadeHex(k % 2 ? '#2c1a48' : '#1a2c48', dim));
+    rect(x0, yTop, Math.max(1, Math.round(s * 0.04)), h, '#0a0810');
+    const band = (f, hh, col) => rect(x0 + 1, Math.round(yTop + h * f), w - 1, Math.max(1, Math.round(h * hh)), shadeHex(col, dim));
+    band(0.62, 0.05, '#e0407a'); band(0.70, 0.03, '#f2d34b'); band(0.76, 0.03, '#5fd3e0');
+    rect(x0 + 1, yBot - Math.max(1, Math.round(h * 0.04)), w - 1, Math.max(1, Math.round(h * 0.04)), '#0a0810');
+    const sc = Math.max(1, Math.floor(h / 26)), n = String(MY_LANE + k);
+    if (h > 10) drawText(n, x0 + w / 2, yTop + Math.round(h * 0.18), shadeHex(k === 0 ? '#f2d34b' : '#ece6d6', dim), sc, 'center');
+    if (k === 0 && sc >= 2 && textWidth('LANE LEGENDS', Math.max(1, sc - 1)) < w - 6) drawText('LANE LEGENDS', x0 + w / 2, yTop + Math.round(h * 0.46), '#ece6d6', Math.max(1, sc - 1), 'center');
+  }
+}
+
+// ---------- pins and ball ----------
+const PROFILE = [[0, 0.026], [0.06, 0.042], [0.18, 0.057], [0.3, 0.0605], [0.42, 0.055], [0.53, 0.04], [0.62, 0.026], [0.7, 0.023], [0.8, 0.029], [0.88, 0.031], [0.95, 0.025], [1, 0.008]];
+function pinRadius(s) {
+  for (let i = 1; i < PROFILE.length; i++) if (s <= PROFILE[i][0]) { const a = PROFILE[i - 1], b = PROFILE[i], t = (s - a[0]) / (b[0] - a[0]); return a[1] + (b[1] - a[1]) * t; }
+  return 0.008;
+}
+const PIN_COLS = [
+  { w: C.pinWhite, s: C.pinShade, r: C.pinRed, rl: C.pinRedLight, o: C.outline },
+  { w: '#b4b0aa', s: '#86817a', r: '#8a2a26', rl: '#9a3a32', o: '#120a06' },
+];
+const samp = [];
+function drawPinAt(p, ox, dimmed) {
+  // axis of the pin in 3D: base point and unit direction
+  let bx = p.x + ox, by = 0, bz = p.z, ax, ay, az;
+  if (p.st === 'pit') dimmed = true;
+  if (p.st === 'down' || p.st === 'pit') { const ux = Math.sin(p.th), uz = Math.cos(p.th); bx -= ux * PIN_HL; bz -= uz * PIN_HL; by = PIN_LR - (p.st === 'pit' ? Math.min(0.35, (p.z - DECK_END) * 1.2) : 0); ax = ux; ay = 0; az = uz; }
+  else {
+    let phi = p.st === 'tip' ? p.phi : 0, th = p.th;
+    if (p.st === 'up' && p.wob > 0) { phi = p.wob * 0.18 * Math.sin(p.wobT * 22); th = p.wobDir || 0; }
+    ax = Math.sin(phi) * Math.sin(th); ay = Math.cos(phi); az = Math.sin(phi) * Math.cos(th);
+  }
+  const pb = proj(bx, by, bz); if (!pb) return;
+  const n = Math.max(5, Math.min(40, Math.ceil(PIN_H * pb.s / 1.3)));
+  samp.length = 0;
+  for (let i = 0; i <= n; i++) {
+    const s = i / n, q = proj(bx + ax * s * PIN_H, by + ay * s * PIN_H, bz + az * s * PIN_H); if (!q) continue;
+    samp.push({ x: q.sx, y: q.sy, r: pinRadius(s) * q.s, s, d: q.d });
+  }
+  samp.sort((a, b) => b.d - a.d);
+  const P = PIN_COLS[dimmed ? 1 : 0];
+  const stripe = s => (s > 0.6 && s < 0.645) || (s > 0.675 && s < 0.72);
+  if (samp.length && Math.max(...samp.map(q => q.r)) < 0.9) { for (const q of samp) px(Math.round(q.x), Math.round(q.y), stripe(q.s) ? P.r : P.w); return; }
+  for (const q of samp) fillCircle(ctx, q.x, q.y, q.r + 1, P.o);
+  for (const q of samp) fillCircle(ctx, q.x, q.y, q.r, stripe(q.s) ? P.r : P.s);
+  for (const q of samp) if (q.r > 1.2) fillCircle(ctx, q.x - q.r * 0.28, q.y - q.r * 0.1, q.r * 0.62, stripe(q.s) ? P.rl : P.w);
+}
+function drawBall(b, o) {
+  const y = b.gutter ? BALL_R - 0.07 : BALL_R;
+  const q = proj(b.x, y, b.z); if (!q) return null;
+  drawBallScreen(q.sx, q.sy, BALL_R * q.s, b.dist, o);
+  return q;
+}
+function drawBallScreen(x, y, r, dist, o) {
+  fillCircle(ctx, x, y, r + 1, C.outline);
+  fillCircle(ctx, x, y, r, o.ball2);
+  fillCircle(ctx, x - r * 0.15, y - r * 0.15, r * 0.82, o.ball);
+  if (o.id === 'dave' && r > 3) { fillCircle(ctx, x + r * 0.2, y - r * 0.3, r * 0.3, '#f2f2f2'); fillCircle(ctx, x - r * 0.35, y + r * 0.3, r * 0.22, '#f2f2f2'); }
+  const a = dist / BALL_R;
+  [[-0.28, 0], [0.12, 0.1], [0, 1.4]].forEach(([hx, off]) => {
+    const t = a + off, fz = Math.sin(t);
+    if (fz > 0.25 && r > 2.5) fillCircle(ctx, x + hx * r, y - Math.cos(t) * r * 0.55, Math.max(0.6, r * 0.12), '#0a0608');
+  });
+  if (r > 2) fillCircle(ctx, x - r * 0.42, y - r * 0.42, Math.max(0.6, r * 0.2), '#ffffffcc');
+}
+
+// ---------- sound ----------
+let actx = null, muted = false, noiseBuf = null;
+function audio() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+  if (actx && actx.state === 'suspended') actx.resume();
+  if (actx && !noiseBuf) { const n = actx.sampleRate, b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; noiseBuf = b; }
+  if (typeof syncMusic === 'function') syncMusic(true);
+  return actx;
+}
+function tone(freq, dur, type = 'square', vol = 0.06, slide = 0, delay = 0) {
+  const a = actx; if (!a || muted) return;
+  const t = a.currentTime + delay, o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+function noise(dur, freq, q, vol, delay = 0, type = 'bandpass') {
+  const a = actx; if (!a || muted || !noiseBuf) return;
+  const t = a.currentTime + delay, src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+  src.buffer = noiseBuf; src.loop = true; f.type = type; f.frequency.value = freq; f.Q.value = q;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f).connect(g).connect(a.destination); src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.02);
+}
+let lastClack = 0;
+const sfx = {
+  clack: (j) => {
+    const now = performance.now(); if (now - lastClack < 14) return; lastClack = now;
+    const v = Math.min(0.5, 0.04 + j * 0.035);
+    noise(0.07 + Math.random() * 0.05, 1800 + Math.random() * 1800, 3, v);
+    tone(700 + Math.random() * 500, 0.05, 'triangle', v * 0.25);
+  },
+  crash: () => { noise(0.5, 1400, 0.8, 0.5); noise(0.25, 3000, 2, 0.3, 0.03); },
+  gutter: () => { tone(300, 0.35, 'triangle', 0.1, -200); },
+  strike: () => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone(f, 0.12, 'square', 0.05, 0, i * 0.08)),
+  spare: () => [392, 523, 659, 784].forEach((f, i) => tone(f, 0.14, 'square', 0.05, 0, i * 0.1)),
+  split: () => [330, 311, 294].forEach((f, i) => tone(f, 0.22, 'square', 0.04, 0, i * 0.2)),
+  win: () => [392, 523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, 'square', 0.05, 0, i * 0.12)),
+  lose: () => [392, 330, 262, 196].forEach((f, i) => tone(f, 0.22, 'triangle', 0.08, 0, i * 0.18)),
+  blip: () => tone(660, 0.05, 'square', 0.03),
+  tick: () => tone(1200, 0.02, 'square', 0.015),
+  set: () => tone(880, 0.07, 'square', 0.04),
+  crowd: (len = 1.6, vol = 0.18) => {
+    const a = actx; if (!a || muted) return;
+    const n = Math.floor(a.sampleRate * len), buf = a.createBuffer(1, n, a.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (0.6 + 0.4 * Math.sin(i / a.sampleRate * 23));
+    const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain(), t = a.currentTime;
+    src.buffer = buf; f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 0.7;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.15); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    src.connect(f).connect(g).connect(a.destination); src.start(t);
+  },
+  jingle: () => [262, 330, 392, 523, 392, 523, 659].forEach((f, i) => tone(f, 0.11, 'square', 0.045, 0, i * 0.08)),
+};
+// the rumble of the ball down the lane
+let roll = null;
+function rollStart() {
+  const a = actx; if (!a || muted || !noiseBuf || roll) return;
+  const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+  src.buffer = noiseBuf; src.loop = true; f.type = 'lowpass'; f.frequency.value = 160; f.Q.value = 2;
+  g.gain.value = 0.0001; src.connect(f).connect(g).connect(a.destination); src.start();
+  roll = { src, g, f };
+}
+function rollSet(v, hz) { if (!roll) return; const t = actx.currentTime; roll.g.gain.setTargetAtTime(Math.max(0.0001, v), t, 0.05); roll.f.frequency.setTargetAtTime(hz, t, 0.1); }
+function rollStop() { if (!roll) return; const r = roll; roll = null; r.g.gain.setTargetAtTime(0.0001, actx.currentTime, 0.08); setTimeout(() => { try { r.src.stop(); } catch (e) {} }, 400); }
+
+// name call-outs and the title music, shared with the darts game
+const VOICE = new Set(BOWLERS.map(b => 'name-' + b.id));
+const clips = {};
+function clip(k) { if (!clips[k]) { const a = new Audio('sounds/voice/' + k + '.mp3'); a.preload = 'auto'; clips[k] = a; } return clips[k]; }
+function say(k) { if (muted || !VOICE.has(k)) return; const a = clip(k); a.currentTime = 0; const pr = a.play(); if (pr) pr.catch(() => {}); }
+const music = new Audio('sounds/music.mp3'); music.loop = true; music.volume = 0.45; music.preload = 'auto';
+let musicState = null;
+function syncMusic(force) {
+  const want = !muted && (state === 'title' || state === 'menu' || state === 'select');
+  if (!force && want === musicState) return;
+  musicState = want;
+  if (want) { const pr = music.play(); if (pr) pr.catch(() => { musicState = null; }); }
+  else { music.pause(); music.currentTime = 0; }
+}
+
+// ---------- saved progress ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('lanes-' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('lanes-' + k, JSON.stringify(v)); } catch (e) {} },
+};
+let beaten = store.get('beaten', []);
+if (!Array.isArray(beaten)) beaten = [];
+const unlocked = i => i === 0 || beaten.includes(i - 1) || beaten.includes(i) || beaten.includes('all');
+let best = store.get('best', {}); if (typeof best !== 'object' || !best) best = {};
+let nFrames = store.get('frames', 10); if (![5, 10].includes(nFrames)) nFrames = 10;
+let guide = store.get('guide', true) !== false;
+let you = store.get('you', 7); if (!(you >= 0 && you < 8)) you = 7;
+let meterPeriod = store.get('speed', 1.2); if (![1.6, 1.2, 0.85].includes(meterPeriod)) meterPeriod = 1.2;
+
+// ---------- game state ----------
+// state: title, menu, select, play, results
+let state = 'title', kind = 'cpu', players = [], cur = 0, frameIdx = 0, opponent = null, winner = null;
+let selMode = 'cpu', sel = 0, picks = [];
+let banner = null, menuSel = 0, autoPlay = false;
+// one delivery: phase position, aim, power, approach, roll, result, sweep, cpuprep
+const T = {
+  phase: 'position', rack: null, rackPins: null, ballNo: 0, world: null, x0: 0.2, aim: 0.2, power: 0, spin: 0,
+  powerSet: false, spinSet: false, t: 0, meterT: 0, released: false, releaseT: 0, ballScreen: null, settleT: 0, resultT: 0,
+  sweepT: 0, plan: null, edit: 'position', pose: 'ready', footY: 196, bowlerShift: 0, hits: 0, firstHitDone: false, after: null, react: null, holdT: 0,
+};
+const fullRack = () => Array(10).fill(true);
+const standingOf = pins => pins.map(p => p.st === 'up' ? { x: p.x, z: p.z } : false);
+const countUp = r => r.filter(Boolean).length;
+const curP = () => players[cur];
+const charIdx = p => BOWLERS.indexOf(p.char);
+
+function setRack(r) { T.rack = r; T.rackPins = makePins(r); }
+
+function startMatch(k, chars, opp) {
+  audio(); kind = k; banner = null;
+  if (k === 'cpu') { opponent = opp; players = [{ name: 'YOU', char: BOWLERS[chars[0]], frames: [] }, { name: BOWLERS[opp].name, char: BOWLERS[opp], cpu: true, frames: [] }]; }
+  else if (k === '2p') players = chars.map((c, i) => ({ name: BOWLERS[c].name, char: BOWLERS[c], frames: [], tag: 'P' + (i + 1) }));
+  else players = [{ name: BOWLERS[chars[0]].name, char: BOWLERS[chars[0]], frames: [] }];
+  players.forEach(p => { p.x0 = 0.2; p.aim = 0.12; p.streak = 0; p.m = { strikes: 0, spares: 0, opens: 0, splits: 0, gutters: 0, converted: 0 }; });
+  cur = 0; frameIdx = 0; state = 'play';
+  startFrame();
+}
+function startDemo() {
+  kind = 'demo';
+  const o = (Math.random() * 8) | 0;
+  players = [{ name: BOWLERS[o].name, char: BOWLERS[o], cpu: true, frames: [], x0: 0, aim: 0, streak: 0, m: {} }];
+  cur = 0; frameIdx = 0; startFrame();
+}
+function startFrame() {
+  const p = curP();
+  if (kind !== 'demo') p.frames[frameIdx] = p.frames[frameIdx] || { rolls: [], split: [] };
+  T.ballNo = 0; setRack(fullRack());
+  startBall();
+  if (kind !== 'demo' && players.length > 1) banner = { text: (p.cpu ? p.name : p.name === 'YOU' ? 'YOUR' : p.name) + (p.name === 'YOU' ? ' FRAME' : ' TO BOWL'), sub: 'FRAME ' + (frameIdx + 1), t: 70 };
+  else if (kind !== 'demo') banner = { text: 'FRAME ' + (frameIdx + 1), t: 60 };
+}
+function startBall() {
+  const p = curP();
+  Object.assign(T, { world: null, powerSet: false, spinSet: false, power: 0, spin: 0, t: 0, meterT: 0, released: false, ballScreen: null, settleT: 0, resultT: 0, sweepT: 0, pose: 'ready', footY: 196, bowlerShift: 0, hits: 0, firstHitDone: false, after: null, react: null, holdT: 0 });
+  T.x0 = p.x0; T.aim = p.aim; T.edit = 'position';
+  Object.assign(cam, CAM_AIM);
+  if (p.cpu || autoPlay) {
+    T.plan = cpuPlan(p.char, T.rack);
+    T.phase = 'cpuprep';
+  } else T.phase = 'position';
+}
+function release() {
+  const p = curP(), o = p.char;
+  let x0 = T.x0, aim = T.aim;
+  if (!p.cpu) { x0 += gauss() * 0.002; aim += gauss() * 0.003; }
+  const ball = makeBall(x0, aim, speedOf(T.power), T.spin);
+  T.world = makeWorld(T.rack, ball);
+  T.world.onHit = (j, a, b) => {
+    const ballHit = a === ball || b === ball;
+    if (ballHit && !T.firstHitDone && j > 2) { T.firstHitDone = true; sfx.crash(); }
+    else if (j > 0.15) sfx.clack(j);
+  };
+  T.released = true; T.releaseT = 0; T.phase = 'roll';
+  p.x0 = T.x0; p.aim = T.aim;
+  rollStart();
+}
+function settleResult() {
+  const p = curP(), before = countUp(T.rack), after = standingOf(T.world.pins), left = countUp(after), n = before - left;
+  rollStop();
+  T.after = after;
+  const ball = T.world.ball, freshRack = before === 10;
+  const split = freshRack && left > 0 && isSplit(after);
+  let text = '', sub = '', snd = null;
+  if (kind !== 'demo') {
+    const f = p.frames[frameIdx]; f.rolls.push(n); f.split.push(split);
+  }
+  const leave = after.map((v, i) => v ? i + 1 : 0).filter(Boolean).join('-');
+  if (left === 0 && freshRack) {
+    p.streak = (p.streak || 0) + 1;
+    text = ['STRIKE!', 'DOUBLE!', 'TURKEY!'][p.streak - 1] || p.streak + ' BAGGER!';
+    snd = 'strike'; T.react = 'cheer'; if (p.m) p.m.strikes++;
+  } else if (left === 0) {
+    text = 'SPARE!'; snd = 'spare'; T.react = 'cheer'; p.streak = 0; if (p.m) { p.m.spares++; if (p.wasSplit) p.m.converted++; }
+  } else {
+    p.streak = 0;
+    if (n === 0 && ball.gutter) { text = 'GUTTER BALL'; snd = 'gutter'; T.react = 'slump'; if (p.m) p.m.gutters++; }
+    else if (n === 0) { text = 'NO PINS'; snd = 'gutter'; T.react = 'slump'; }
+    else if (split) { text = 'SPLIT!'; sub = leave; snd = 'split'; T.react = 'slump'; if (p.m) p.m.splits++; }
+    else { text = n === 1 ? '1 PIN' : n + ' PINS'; sub = freshRack ? 'LEAVES ' + leave : ''; }
+  }
+  p.wasSplit = split;
+  banner = { text, sub, t: 110 };
+  if (snd) sfx[snd]();
+  if (snd === 'strike') sfx.crowd(1.6, 0.16);
+  T.phase = 'result'; T.resultT = 0;
+}
+// After the sweep: next ball in this frame, or the next bowler.
+function nextBall() {
+  const p = curP();
+  if (kind === 'demo') {
+    T.ballNo++;
+    if (T.ballNo >= 2 || countUp(T.after) === 0) { if (Math.random() < 0.5) startDemo(); else { T.ballNo = 0; setRack(fullRack()); startBall(); } }
+    else { setRack(T.after); startBall(); }
+    return;
+  }
+  const f = p.frames[frameIdx], last = frameIdx === nFrames - 1;
+  if (frameDone(p.frames, frameIdx, nFrames - 1)) {
+    if (!last || true) {
+      const r = f.rolls;
+      if (f.rolls[0] === 10) {} else if (r[0] + r[1] === 10) {} else if (p.m) p.m.opens++;
+    }
+    nextTurn(); return;
+  }
+  T.ballNo++;
+  const r = f.rolls;
+  // tenth frame: fresh rack after a strike or a spare
+  if (last && (countUp(T.after) === 0)) setRack(fullRack()); else setRack(T.after);
+  startBall();
+}
+function nextTurn() {
+  cur++;
+  if (cur >= players.length) { cur = 0; frameIdx++; }
+  if (frameIdx >= nFrames) { endMatch(); return; }
+  startFrame();
+}
+const finalScore = p => { const c = scoreCard(p.frames, nFrames); return c[nFrames - 1].total || 0; };
+function endMatch() {
+  players.forEach(p => { p.final = finalScore(p); const id = p.char.id; if (nFrames === 10 && !p.cpu && (!best[id] || p.final > best[id])) { best[id] = p.final; p.pb = true; } });
+  store.set('best', best);
+  if (players.length === 1) winner = players[0];
+  else winner = players[0].final === players[1].final ? null : players[0].final > players[1].final ? players[0] : players[1];
+  if (kind === 'cpu') {
+    if (winner === players[0]) { if (!beaten.includes(opponent)) beaten.push(opponent); store.set('beaten', beaten); sfx.win(); sfx.crowd(2.2, 0.2); }
+    else sfx.lose();
+  } else sfx.win();
+  state = 'over'; banner = { text: winner ? (winner.name === 'YOU' ? 'YOU WIN!' : winner.name + ' WINS') : players.length > 1 ? 'TIE GAME' : 'GAME OVER', sub: 'PRESS SPACE', t: 99999 };
+}
+
+// ---------- per-tick update ----------
+const DT = 1 / 60;
+const tri = u => { const m = ((u % 2) + 2) % 2; return 1 - Math.abs(m - 1); };
+const boardNo = x => Math.max(1, Math.min(39, Math.round((LANE_HALF - x) / BOARD + 0.5)));
+let heldDir = 0, heldT = 0;
+function nudge(dir) {
+  if (T.phase === 'position') T.x0 = clamp(T.x0 + dir * BOARD, -0.45, 0.45);
+  else if (T.phase === 'aim') T.aim = clamp(T.aim + dir * BOARD, -0.5, 0.5);
+  else return;
+  sfx.tick();
+}
+function poseAt(t) { return t < 0.12 ? 'ready' : t < 0.4 ? 'push' : t < 0.7 ? 'back' : t < 1.02 ? 'slide' : 'follow'; }
+const RELEASE_T = 0.94;
+function updateTurn() {
+  const p = curP(), fast = kind === 'demo' ? 1.25 : 1;
+  if ((T.phase === 'position' || T.phase === 'aim') && heldDir) {
+    heldT++;
+    if (heldT > 14 && heldT % 2 === 0) nudge(heldDir);
+  }
+  if (T.phase === 'power') { T.meterT += DT; T.power = tri(T.meterT / meterPeriod); }
+  if (T.phase === 'cpuprep') {
+    T.t += DT * fast; const P = T.plan;
+    T.x0 += (P.x0 - T.x0) * 0.12;
+    if (T.t > 0.45) T.aim += (P.aim - T.aim) * 0.14;
+    if (T.t > 1.0) T.power = Math.min(P.power, (T.t - 1.0) * 1.6);
+    if (T.t > 1.0 + P.power / 1.6 + 0.25) { T.x0 = P.x0; T.aim = P.aim; T.power = P.power; T.powerSet = true; T.phase = 'approach'; T.t = 0; T.meterT = 0; }
+  }
+  if (T.phase === 'approach') {
+    T.t += DT;
+    if (!T.spinSet) {
+      T.meterT += DT;
+      if (p.cpu || autoPlay) { T.spin += (T.plan.spin - T.spin) * 0.18; if (T.t > 0.6) { T.spin = T.plan.spin; T.spinSet = true; } }
+      else T.spin = 1 - 2 * tri(T.meterT / (meterPeriod * 1.1) + 1);
+    }
+    T.pose = poseAt(T.t);
+    T.footY = 196 - 24 * Math.min(1, T.t / RELEASE_T);
+    if (T.t >= RELEASE_T) { if (!T.spinSet) { T.spinSet = true; if (!p.cpu) sfx.set(); } release(); }
+  }
+  if (T.phase === 'roll' || T.phase === 'result' || T.phase === 'sweep') { T.t += DT; T.pose = 'follow'; }
+  if (T.phase === 'roll') {
+    const Wd = T.world, b = Wd.ball;
+    for (let i = 0; i < 4; i++) stepWorld(Wd, DT / 4);
+    T.releaseT += DT;
+    const sp = Math.hypot(b.vx, b.vz);
+    if (!b.done) rollSet(b.z < HEAD_Z ? 0.05 + sp * 0.012 : 0.02, b.gutter ? 260 : 120 + sp * 8); else rollSet(0.0001, 100);
+    if (b.z > HEAD_Z - 0.4 || b.done) T.settleT += DT;
+    if ((T.settleT > 0.9 && worldSettled(Wd)) || T.settleT > 5.5) settleResult();
+  }
+  if (T.phase === 'result') {
+    T.resultT += DT;
+    for (let i = 0; i < 4; i++) stepWorld(T.world, DT / 4);
+    if (T.resultT > (kind === 'demo' ? 1.4 : 2.0)) { T.phase = 'sweep'; T.sweepT = 0; banner = null; }
+  }
+  if (T.phase === 'sweep') { T.sweepT += DT; if (T.sweepT >= 1.0) nextBall(); }
+  // camera: rides behind the ball, then holds on the pins
+  if (T.phase === 'roll' || T.phase === 'result' || T.phase === 'sweep') {
+    const b = T.world.ball;
+    const tz = clamp(b.z - 6.2, CAM_AIM.z, CAM_PINS_Z);
+    if (T.releaseT > 0.25) cam.z += (Math.max(cam.z, tz) - cam.z) * 0.1;
+    const k = (cam.z - CAM_AIM.z) / (CAM_PINS_Z - CAM_AIM.z);
+    cam.y = CAM_AIM.y + (1.05 - CAM_AIM.y) * k;
+  } else { cam.z = CAM_AIM.z; cam.y = CAM_AIM.y; cam.x = 0; }
+}
+function update() {
+  if (banner && --banner.t <= 0) banner = null;
+  if (state === 'play' || state === 'title') updateTurn();
+  if (state === 'over' && T.world) for (let i = 0; i < 4; i++) stepWorld(T.world, DT / 4);
+  syncMusic();
+}
+
+// ---------- drawing the scene ----------
+const NEIGHBOUR_PINS = makePins(null);
+function drawScene() {
+  renderFloor();
+  drawMasking();
+  // the other lanes' racks, for company
+  for (let k = -4; k <= 4; k++) {
+    if (!k) continue;
+    const q = proj(k * PITCH, 0, HEAD_Z); if (!q || q.sx < -40 || q.sx > W + 40) continue;
+    [...NEIGHBOUR_PINS].sort((a, b) => b.z - a.z).forEach(p => drawPinAt(p, k * PITCH, true));
+  }
+  const pins = T.world ? T.world.pins : T.rackPins;
+  const ents = [];
+  let barZ = null, barH = 0;
+  if (T.phase === 'sweep') {
+    const s = T.sweepT;
+    if (s < 0.3) { barZ = HEAD_Z - 0.3; barH = 0.9 - (s / 0.3) * 0.86; }
+    else if (s < 0.72) { barZ = HEAD_Z - 0.3 + (s - 0.3) / 0.42 * 1.4; barH = 0.04; }
+  }
+  for (const p of pins || []) {
+    if (p.st === 'gone') continue;
+    if (p.st === 'pit' && T.phase === 'sweep' && T.sweepT > 0.5) continue;
+    if (T.phase === 'sweep' && p.st !== 'up' && (T.sweepT > 0.72 || (barZ !== null && T.sweepT > 0.3 && p.z < barZ + 0.1))) continue;
+    ents.push({ z: p.z, f: () => drawPinAt(p, 0, false) });
+  }
+  if (barZ !== null) ents.push({ z: barZ, f: () => drawSweepBar(barZ, barH) });
+  const b = T.world && T.world.ball;
+  if (b && T.released && !(b.done && b.z > PIT_Z - 0.1)) ents.push({ z: b.z, f: () => drawRolling(b) });
+  ents.sort((a, c) => c.z - a.z).forEach(e => e.f());
+  drawBowler();
+  drawAimMarks();
+}
+function drawSweepBar(z, h) {
+  const a = proj(-WALL_X, h + 0.12, z), c = proj(WALL_X, h, z); if (!a || !c) return;
+  rect(Math.round(a.sx) - 1, Math.round(a.sy) - 1, Math.round(c.sx - a.sx) + 2, Math.round(c.sy - a.sy) + 2, C.outline);
+  rect(Math.round(a.sx), Math.round(a.sy), Math.round(c.sx - a.sx), Math.max(1, Math.round(c.sy - a.sy)), '#4a4a58');
+  rect(Math.round(a.sx), Math.round(a.sy), Math.round(c.sx - a.sx), 1, '#8a8a98');
+}
+function bowlerScreenX() { return Math.round(CX + T.x0 * 55 - 31); }
+function drawBowler() {
+  const p = curP(); if (!p) return;
+  const shift = Math.max(0, (cam.z - CAM_AIM.z) * 26);
+  const y = Math.round(T.footY + shift) - FOOT;
+  if (y > H) return;
+  const spr = sprites[charIdx(p)][T.pose];
+  ctx.drawImage(spr, bowlerScreenX(), y);
+}
+function drawRolling(b) {
+  const o = curP().char;
+  const y = b.gutter ? BALL_R - 0.07 : BALL_R, q = proj(b.x, y, b.z); if (!q) return;
+  let x = q.sx, yy = q.sy, r = BALL_R * q.s;
+  const k = Math.min(1, T.releaseT / 0.3);
+  if (k < 1) {
+    // blend from the bowler's hand into the lane
+    const hx = bowlerScreenX() + BALL_IN_POSE.slide[0], hy = Math.round(T.footY) - FOOT + BALL_IN_POSE.slide[1];
+    const e = k * k * (3 - 2 * k);
+    x = hx + (x - hx) * e; yy = hy + (yy - hy) * e; r = 5 + (r - 5) * e;
+  }
+  drawBallScreen(x, yy, r, b.dist, o);
+}
+function drawAimMarks() {
+  const p = curP(); if (!p || !['position', 'aim', 'power', 'cpuprep'].includes(T.phase)) return;
+  const blink = Math.floor(performance.now() / 250) % 2;
+  const a = proj(T.aim, 0, ARROWS_Z), f = proj(T.x0, 0, 0.3);
+  if (guide && a && f && !p.cpu) {
+    for (let i = 0; i <= 14; i++) { const t = i / 14, x = f.sx + (a.sx - f.sx) * t, y = f.sy + (a.sy - f.sy) * t; if (i % 2 === 0) px(Math.round(x), Math.round(y), '#f2d34b88'); }
+  }
+  if (a) {
+    const x = Math.round(a.sx), y = Math.round(a.sy), col = T.phase === 'aim' && blink ? '#ffffff' : C.yellow;
+    rect(x - 3, y + 2, 7, 1, C.outline); rect(x - 2, y + 1, 5, 1, col); rect(x - 1, y, 3, 1, col); rect(x, y - 1, 1, 1, col); rect(x - 3, y + 2, 7, 1, col);
+  }
+  if (f) {
+    const x = Math.round(f.sx), y = Math.round(f.sy) + 1, col = T.phase === 'position' && blink ? '#ffffff' : C.cyan;
+    rect(x - 2, y, 5, 1, col); rect(x - 1, y + 1, 3, 1, col); px(x, y + 2, col);
+  }
+}
+
+// ---------- HUD ----------
+function markColour(m, split) { return m === 'X' ? C.yellow : m === '/' ? C.cyan : split ? C.red : C.chalk; }
+function drawScoreboard(y0) {
+  const nameW = 34, x0 = 1, avail = W - 2 - nameW, fw = Math.floor((avail - 14) / nFrames), lastW = avail - fw * (nFrames - 1);
+  players.forEach((p, i) => {
+    const y = y0 + i * 17, active = i === cur && state === 'play';
+    rect(x0, y, W - 2, 16, C.panelEdge);
+    rect(x0 + 1, y + 1, nameW - 2, 14, active ? '#3a3010' : C.panel);
+    drawText(p.name, x0 + 3, y + 3, active ? C.yellow : C.chalk, 1, 'left');
+    drawText(p.cpu ? 'CPU' : p.tag || (p.name === 'YOU' ? p.char.name : ''), x0 + 3, y + 9, C.chalkDim, 1, 'left');
+    const card = scoreCard(p.frames, nFrames);
+    for (let f = 0; f < nFrames; f++) {
+      const fx = x0 + nameW + f * fw - 1, w = f === nFrames - 1 ? lastW : fw, last = f === nFrames - 1;
+      const on = active && f === frameIdx;
+      rect(fx, y + 1, w - 1, 14, on ? '#2a3550' : C.panel);
+      const fr = p.frames[f], marks = frameMarks(fr, last);
+      const nb = last ? 3 : 2;
+      for (let k = 1; k < nb; k++) { const bx = fx + w - 1 - (nb - k) * 9; rect(bx - 1, y + 1, 1, 7, C.panelLine); }
+      rect(fx + w - 1 - (nb - 1) * 9 - 1, y + 8, (nb - 1) * 9 + 1, 1, C.panelLine);
+      marks.forEach((m, k) => {
+        if (!m) return;
+        const bx = last ? fx + w - 1 - (3 - k) * 9 + 3 : k === 0 ? fx + w - 1 - 18 + 3 : fx + w - 1 - 9 + 3;
+        drawText(m, bx, y + 2, markColour(m, fr.split && fr.split[k] && m !== 'X'), 1, 'left');
+      });
+      if (card[f].total !== null) drawText(String(card[f].total), fx + w - 4, y + 9, C.chalk, 1, 'right');
+      drawText(String(f + 1), fx + 2, y + 9, on ? C.yellow : '#4a5a7a', 1, 'left');
+    }
+  });
+  return y0 + players.length * 17;
+}
+function drawPrompt(y, text, sub) {
+  const w = Math.max(textWidth(text), sub ? textWidth(sub) : 0) + 10, h = sub ? 17 : 10, x = CX - Math.round(w / 2);
+  rect(x - 1, y - 1, w + 2, h + 2, C.outline); rect(x, y, w, h, '#100c09dd');
+  drawText(text, CX, y + 3, C.yellow, 1, 'center');
+  if (sub) drawText(sub, CX, y + 10, C.chalkDim, 1, 'center');
+}
+const CHEERS = ['GET IN!', 'YES!', 'LOVELY!', 'BOOM!'], GROANS = ['NOOO!', 'UNLUCKY', 'ARGH!', 'OH DEAR'];
+function drawPortraitPanel() {
+  const p = curP(); if (!p) return;
+  const i = charIdx(p), o = p.char;
+  rect(3, 133, 52, 52, C.outline); rect(4, 134, 50, 50, kind === 'demo' ? C.yellow : (cur === 0 ? C.p1 : C.p2)); rect(5, 135, 48, 48, '#26324a');
+  if (portraits[i]) ctx.drawImage(portraits[i], 5, 135);
+  const plate = `${o.name} ${o.nick}`;
+  rect(3, 186, textWidth(plate) + 8, 11, '#100c09'); drawText(plate, 7, 189, C.yellow, 1, 'left');
+  if (T.phase === 'result' && T.react && T.resultT > 0.2) {
+    const lines = T.react === 'cheer' ? CHEERS : GROANS, s = lines[(frameIdx + T.ballNo + i) % lines.length];
+    const w = textWidth(s, 1) + 8;
+    rect(46, 124, w + 2, 11, C.outline); rect(47, 125, w, 9, '#f4ecd8'); rect(49, 134, 3, 3, '#f4ecd8'); px(48, 136, '#f4ecd8');
+    drawText(s, 51, 127, '#2a160c', 1, 'left');
+  }
+}
+function drawMeters() {
+  const x = 252, y = 128, w = 64;
+  rect(x - 1, y - 1, w + 2, 70, C.outline); rect(x, y, w, 68, '#100c09e8');
+  drawText('POWER', x + 4, y + 4, C.chalkDim, 1, 'left');
+  const bx = x + 4, bw = w - 8;
+  rect(bx, y + 11, bw, 7, '#26324a');
+  const fill = Math.round(T.power * bw);
+  for (let i = 0; i < fill; i++) rect(bx + i, y + 12, 1, 5, i < bw * 0.55 ? '#3aa860' : i < bw * 0.85 ? '#f2d34b' : '#d8443a');
+  for (let k = 1; k < 4; k++) rect(bx + Math.round(bw * k / 4), y + 11, 1, 2, '#0a0810');
+  drawText(Math.round(speedOf(T.power) * 2.237) + ' MPH', x + w - 4, y + 4, T.powerSet || T.phase === 'power' ? C.chalk : '#4a5a7a', 1, 'right');
+  drawText('SPIN', x + 4, y + 24, C.chalkDim, 1, 'left');
+  rect(bx, y + 31, bw, 7, '#26324a'); rect(bx + bw / 2, y + 30, 1, 9, '#4a5a7a');
+  drawText('<', bx - 1, y + 40, C.chalkDim, 1, 'left'); drawText('>', bx + bw - 2, y + 40, C.chalkDim, 1, 'left');
+  const nx = Math.round(bx + bw / 2 - T.spin * bw / 2);
+  if (T.phase === 'approach' || T.spinSet || T.phase === 'roll') { rect(nx - 1, y + 30, 3, 9, C.outline); rect(nx, y + 31, 1, 7, T.spinSet ? C.yellow : '#ffffff'); }
+  const sp = T.spin, word = Math.abs(sp) < 0.08 ? 'STRAIGHT' : sp > 0 ? 'HOOK' : 'BACK UP';
+  if (T.phase === 'approach' || T.spinSet || T.phase === 'roll') drawText(word, x + w / 2, y + 41, C.chalk, 1, 'center');
+  drawText('BOARD ' + boardNo(T.x0), x + 4, y + 52, T.phase === 'position' ? C.cyan : C.chalkDim, 1, 'left');
+  drawText('AIM ' + boardNo(T.aim), x + 4, y + 60, T.phase === 'aim' ? C.yellow : C.chalkDim, 1, 'left');
+}
+function drawBanner(cx = CX, cy = 96) {
+  if (!banner) return;
+  const w = Math.max(textWidth(banner.text, 2), banner.sub ? textWidth(banner.sub, 1) : 0) + 16;
+  const h = banner.sub ? 30 : 22, x = Math.round(cx - w / 2), y = Math.round(cy - h / 2);
+  rect(x - 1, y - 1, w + 2, h + 2, C.outline); rect(x, y, w, h, C.bannerBg);
+  rect(x, y, w, 1, C.yellow); rect(x, y + h - 1, w, 1, C.yellow);
+  drawText(banner.text, cx, y + 6, C.yellow, 2, 'center');
+  if (banner.sub) drawText(banner.sub, cx, y + 20, C.chalk, 1, 'center');
+}
+const PROMPTS = {
+  position: ['< > MOVE YOUR BOWLER', 'SPACE TO SET   UP/DOWN SWITCHES TO AIM'],
+  aim: ['< > MOVE THE AIM ARROW', 'SPACE TO SET   UP/DOWN SWITCHES TO POSITION'],
+  power: ['SPACE TO STOP THE POWER', 'FASTER BALLS HOOK LESS'],
+  approach: ['SPACE TO STOP THE SPIN', '< HOOKS LEFT     BACKS UP RIGHT >'],
+};
+function drawPlay() {
+  drawScene();
+  const yb = drawScoreboard(1);
+  const p = curP();
+  if (!p.cpu && PROMPTS[T.phase] && !(T.phase === 'approach' && T.spinSet)) drawPrompt(yb + 3, ...PROMPTS[T.phase]);
+  if (p.cpu && T.phase === 'cpuprep') drawPrompt(yb + 3, p.name + ' IS LINING UP');
+  drawPortraitPanel();
+  if (['position', 'aim', 'power', 'approach', 'cpuprep'].includes(T.phase) || (T.phase === 'roll' && T.releaseT < 0.8)) drawMeters();
+  drawBanner();
+}
+
+// ---------- menu, select, title, results ----------
+function drawSlate(title) {
+  rect(0, 0, W, H, '#5a3418');
+  for (let y = 0; y < H; y += 3) rect(0, y, W, 1, '#7a4a22');
+  rect(6, 6, W - 12, H - 12, C.outline); rect(8, 8, W - 16, H - 16, '#141a26');
+  for (let i = 0; i < 260; i++) px(8 + ((i * 97) % (W - 16)), 8 + ((i * 53) % (H - 16)), '#1c2434');
+  if (title) drawText(title, 160, 16, C.yellow, 3, 'center');
+}
+const MENU = ['VS COMPUTER', '2 PLAYERS', 'PRACTICE', 'GAME', 'AIM GUIDE'];
+const MENU_YS = [56, 76, 96, 124, 144];
+function drawMenu() {
+  drawSlate('LANE LEGENDS');
+  drawText('TEN PIN BOWLING FOR 1 OR 2 PLAYERS', 160, 38, C.chalkDim, 1, 'center');
+  rect(40, 50, 240, 1, C.chalkDim);
+  MENU.forEach((m, i) => {
+    let label = m;
+    if (i === 3) label = `< GAME: ${nFrames} FRAMES >`;
+    if (i === 4) label = `< AIM GUIDE: ${guide ? 'ON' : 'OFF'} >`;
+    const y = MENU_YS[i], on = i === menuSel;
+    if (i === 3) rect(40, y - 9, 240, 1, '#2a3550');
+    drawText(label, 160, y, on ? C.yellow : (i >= 3 ? C.chalkDim : C.chalk), 2, 'center');
+    if (on && i < 3) drawText('>', 160 - textWidth(label, 2) / 2 - 14, y, C.yellow, 2, 'left');
+  });
+  rect(40, 166, 240, 1, C.chalkDim);
+  drawText('ARROWS TO CHOOSE   SPACE TO SELECT', 160, 172, C.chalkDim, 1, 'center');
+  drawText('ESC RETURNS HERE ANY TIME', 160, 182, C.chalkDim, 1, 'center');
+}
+function openMenu() { audio(); rollStop(); if (state === 'title') sfx.jingle(); state = 'menu'; banner = null; heldDir = 0; }
+function menuMove([dx, dy]) {
+  if (dy) { menuSel = (menuSel + dy + MENU.length) % MENU.length; sfx.blip(); }
+  if (dx && menuSel === 3) { nFrames = nFrames === 10 ? 5 : 10; store.set('frames', nFrames); sfx.blip(); }
+  if (dx && menuSel === 4) { guide = !guide; store.set('guide', guide); sfx.blip(); }
+}
+function menuSelect() {
+  if (menuSel === 0) openSelect('you');
+  else if (menuSel === 1) openSelect('p1');
+  else if (menuSel === 2) openSelect('prac');
+  else menuMove([1, 0]);
+}
+function openSelect(mode) {
+  audio(); rollStop(); state = 'select'; selMode = mode; banner = null; heldDir = 0;
+  if (mode === 'you' || mode === 'prac') sel = you;
+  else if (mode === 'p1') { picks = []; sel = you; }
+  else if (mode === 'cpu') { sel = BOWLERS.findIndex((o, i) => unlocked(i) && !beaten.includes(i)); if (sel < 0) sel = 0; }
+}
+const selOpen = i => selMode !== 'cpu' || unlocked(i);
+function moveSel([dx, dy]) { const c = (sel % 4 + dx + 4) % 4, r = (Math.floor(sel / 4) + dy + 2) % 2; sel = r * 4 + c; sfx.blip(); }
+function selectAction() {
+  if (selMode === 'you') { you = sel; store.set('you', you); say('name-' + BOWLERS[sel].id); openSelect('cpu'); return; }
+  if (selMode === 'prac') { you = sel; store.set('you', you); say('name-' + BOWLERS[sel].id); startMatch('practice', [sel]); return; }
+  if (selMode === 'p1') { picks = [sel]; selMode = 'p2'; sfx.blip(); say('name-' + BOWLERS[sel].id); sel = (sel + 1) % 8; return; }
+  if (selMode === 'p2') {
+    if (sel === picks[0]) { banner = { text: 'TAKEN', sub: 'PLAYER 1 IS ' + BOWLERS[sel].name, t: 70 }; return; }
+    say('name-' + BOWLERS[sel].id); startMatch('2p', [picks[0], sel]); return;
+  }
+  if (unlocked(sel)) { say('name-' + BOWLERS[sel].id); startMatch('cpu', [you], sel); }
+  else banner = { text: 'LOCKED', sub: 'BEAT ' + BOWLERS[sel - 1].name + ' FIRST', t: 70 };
+}
+function drawSelect() {
+  rect(0, 0, W, H, '#10141e');
+  for (let y = 0; y < H; y += 2) rect(0, y, W, 1, '#141a26');
+  const head = { you: 'CHOOSE YOUR BOWLER', prac: 'PRACTICE: CHOOSE YOUR BOWLER', cpu: 'CHOOSE YOUR OPPONENT', p1: 'PLAYER 1: CHOOSE YOUR BOWLER', p2: 'PLAYER 2: CHOOSE YOUR BOWLER' }[selMode];
+  drawText(head, 8, 5, C.yellow, 1, 'left');
+  drawText('ARROWS + SPACE', 312, 5, C.chalkDim, 1, 'right');
+  BOWLERS.forEach((o, i) => {
+    const c = i % 4, r = Math.floor(i / 4), x = 8 + c * 78, y = 16 + r * 86, open = selOpen(i), on = i === sel;
+    rect(x, y, 72, 82, on ? C.yellow : '#3a4a66');
+    rect(x + 1, y + 1, 70, 80, '#1a2236');
+    rect(x + 2, y + 2, 68, 78, open ? '#26324a' : '#181e2a');
+    for (let k = 0; k < 68; k += 4) rect(x + 2 + k, y + 2, 2, 78, open ? '#2a3752' : '#1a2030');
+    const pic = open ? portraits[i] : silhouettes[i];
+    if (pic) ctx.drawImage(pic, x + 12, y + 3);
+    rect(x + 4, y + 53, 64, 26, '#100c09');
+    drawText(open ? o.name : '???', x + 36, y + 56, open ? C.chalk : C.chalkDim, 1, 'center');
+    drawText(open ? o.nick : 'LOCKED', x + 36, y + 64, open ? C.yellow : C.chalkDim, 1, 'center');
+    if (open && selMode === 'cpu') drawText('AV ' + o.avg, x + 36, y + 72, C.chalkDim, 1, 'center');
+    else if (selMode !== 'cpu' && best[o.id]) drawText('BEST ' + best[o.id], x + 36, y + 72, C.chalkDim, 1, 'center');
+    if (selMode === 'p2' && picks[0] === i) { rect(x + 2, y + 2, 16, 9, C.p1); drawText('P1', x + 10, y + 4, C.black, 1, 'center'); }
+    if (selMode === 'cpu' && beaten.includes(i)) { const sx = x + 61, sy = y + 5; [[2,0],[1,1],[2,1],[3,1],[0,2],[1,2],[2,2],[3,2],[4,2],[1,3],[3,3],[0,4],[4,4]].forEach(([a, b]) => px(sx + a, sy + b, C.yellow)); }
+    if (!open) { rect(x + 32, y + 26, 8, 6, '#8a8a8a'); rect(x + 33, y + 22, 1, 4, '#8a8a8a'); rect(x + 38, y + 22, 1, 4, '#8a8a8a'); rect(x + 34, y + 21, 4, 1, '#8a8a8a'); }
+  });
+  drawText(selMode === 'cpu' ? 'BEAT EACH OPPONENT TO UNLOCK THE NEXT' : 'YOU BOWL AS THEM', 160, 191, C.chalkDim, 1, 'center');
+  drawBanner(160, 100);
+}
+function drawTitle() {
+  drawScene();
+  drawPortraitPanel();
+  // logo plate
+  rect(9, 5, 150, 56, C.outline); rect(10, 6, 148, 54, C.bannerBg);
+  rect(10, 6, 148, 1, C.yellow); rect(10, 59, 148, 1, C.yellow);
+  drawText('LANE', 85, 11, '#5a3418', 4, 'center'); drawText('LANE', 84, 10, C.yellow, 4, 'center');
+  drawText('LEGENDS', 85, 34, '#5a3418', 3, 'center'); drawText('LEGENDS', 84, 33, C.chalk, 3, 'center');
+  drawText('TEN PIN BOWLING FOR 1 OR 2', 84, 51, C.chalkDim, 1, 'center');
+  if (Math.floor(performance.now() / 500) % 2 === 0) { rect(116, 168, 88, 13, C.bannerBg); drawText('PRESS SPACE', 160, 172, C.yellow, 1, 'center'); }
+  // the ladder
+  rect(213, 3, 105, 194, C.outline); rect(214, 4, 103, 192, '#100c09e0');
+  drawText('THE LADDER', 265, 9, C.yellow, 1, 'center');
+  rect(218, 17, 95, 1, C.chalkDim);
+  BOWLERS.forEach((op, i) => {
+    const y = 23 + i * 20, open = unlocked(i);
+    drawText(`${i + 1} ${open ? op.name : '???'}`, 219, y, open ? C.chalk : C.chalkDim, 1, 'left');
+    drawText(open ? op.nick : 'LOCKED', 223, y + 7, C.chalkDim, 1, 'left');
+    if (open) drawText(String(op.avg), 313, y, C.chalkDim, 1, 'right');
+    if (beaten.includes(i)) drawText('+', 313, y + 7, C.yellow, 1, 'right');
+  });
+  drawText('AV  + BEATEN', 265, 186, C.chalkDim, 1, 'center');
+  drawBanner(110, 110);
+}
+function drawResult() {
+  const cpuMatch = kind === 'cpu';
+  drawSlate(winner ? (winner.name === 'YOU' ? 'YOU WIN!' : winner.name + ' WINS') : players.length > 1 ? 'TIE GAME' : 'FINAL SCORE');
+  drawScoreboard(36);
+  const yb = 36 + players.length * 17 + 6;
+  const cols = players.length === 1 ? [160] : [86, 234];
+  players.forEach((p, i) => {
+    const x = cols[i], won = p === winner || players.length === 1;
+    rect(x - 27 - 30, yb, 54, 54, won ? C.yellow : C.chalkDim); rect(x - 26 - 30, yb + 1, 52, 52, '#26324a');
+    const pic = portraits[charIdx(p)]; if (pic) ctx.drawImage(pic, x - 24 - 30, yb + 3);
+    drawText(p.name, x + 26, yb + 4, won ? C.yellow : C.chalk, 1, 'center');
+    drawText(String(p.final), x + 26, yb + 14, won ? C.yellow : C.chalk, 3, 'center');
+    if (p.pb) drawText('NEW BEST', x + 26, yb + 34, C.cyan, 1, 'center');
+    const m = p.m, rows = [['STRIKES', m.strikes], ['SPARES', m.spares], ['OPEN FRAMES', m.opens], ['SPLITS', m.splits], ['GUTTERS', m.gutters]];
+    rows.forEach(([k, v], r) => { drawText(k, x - 56, yb + 60 + r * 8, C.chalkDim, 1, 'left'); drawText(String(v), x + 56, yb + 60 + r * 8, C.chalk, 1, 'right'); });
+  });
+  drawText(cpuMatch ? 'SPACE FOR THE LADDER' : 'SPACE FOR THE MENU', 160, 182, C.yellow, 1, 'center');
+}
+function render() {
+  if (state === 'select') { drawSelect(); return; }
+  if (state === 'title') { drawTitle(); return; }
+  if (state === 'menu') { drawMenu(); return; }
+  if (state === 'results') { drawResult(); return; }
+  drawPlay();
+}
+
+// ---------- input ----------
+function action() {
+  audio();
+  if (state === 'title') { openMenu(); return; }
+  if (state === 'menu') { menuSelect(); return; }
+  if (state === 'select') { selectAction(); return; }
+  if (state === 'over') { state = 'results'; banner = null; return; }
+  if (state === 'results') { if (kind === 'cpu') openSelect('cpu'); else openMenu(); return; }
+  if (state !== 'play' || curP().cpu) {
+    if (state === 'play' && T.phase === 'result' && T.resultT > 0.4) T.resultT = 99;
+    return;
+  }
+  if (T.phase === 'position') { T.phase = 'aim'; sfx.set(); }
+  else if (T.phase === 'aim') { T.phase = 'power'; T.meterT = 0; sfx.set(); }
+  else if (T.phase === 'power') { T.powerSet = true; T.phase = 'approach'; T.t = 0; T.meterT = 0; sfx.set(); }
+  else if (T.phase === 'approach' && !T.spinSet) { T.spinSet = true; sfx.set(); }
+  else if (T.phase === 'result' && T.resultT > 0.4) T.resultT = 99;
+}
+function vertical(dy) {
+  if (state === 'select') { moveSel([0, dy]); return; }
+  if (state === 'menu') { menuMove([0, dy]); return; }
+  if (state === 'play' && !curP().cpu && (T.phase === 'position' || T.phase === 'aim')) { T.phase = T.phase === 'position' ? 'aim' : 'position'; sfx.blip(); }
+}
+function horizontal(dx, fresh) {
+  if (state === 'select') { if (fresh) moveSel([dx, 0]); return; }
+  if (state === 'menu') { if (fresh) menuMove([dx, 0]); return; }
+  if (state === 'play' && !curP().cpu) { if (fresh) { nudge(dx); heldDir = dx; heldT = 0; } }
+}
+const KEYS = { ArrowUp: [0, -1], KeyW: [0, -1], ArrowDown: [0, 1], KeyS: [0, 1], ArrowLeft: [-1, 0], KeyA: [-1, 0], ArrowRight: [1, 0], KeyD: [1, 0] };
+window.addEventListener('keydown', e => {
+  const k = KEYS[e.code];
+  if (k) { e.preventDefault(); if (e.repeat) return; if (k[1]) vertical(k[1]); else horizontal(k[0], true); return; }
+  if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (!e.repeat) action(); return; }
+  if (e.code === 'Digit1' || e.code === 'Numpad1') openSelect('you');
+  if (e.code === 'Digit2' || e.code === 'Numpad2') openSelect('p1');
+  if (e.code === 'KeyP') openSelect('prac');
+  if (e.code === 'KeyM') toggleMute();
+  if (e.code === 'Escape') openMenu();
+});
+window.addEventListener('keyup', e => { const k = KEYS[e.code]; if (k && k[0] === heldDir) heldDir = 0; });
+window.addEventListener('blur', () => { heldDir = 0; });
+document.querySelectorAll('[data-dir]').forEach(b => {
+  b.addEventListener('pointerdown', e => { e.preventDefault(); audio(); const [x, y] = b.dataset.dir.split(',').map(Number); if (y) vertical(y); else horizontal(x, true); });
+  const up = () => { heldDir = 0; };
+  b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); b.addEventListener('pointercancel', up);
+});
+document.getElementById('bowlBtn').addEventListener('pointerdown', e => { e.preventDefault(); action(); });
+cv.addEventListener('pointerdown', e => {
+  const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
+  if (state === 'select') {
+    const c = Math.floor((x - 8) / 78), rr = Math.floor((y - 16) / 86);
+    if (c >= 0 && c < 4 && rr >= 0 && rr < 2) { const i = rr * 4 + c; if (sel === i) action(); else { sel = i; sfx.blip(); } }
+    return;
+  }
+  if (state === 'menu') {
+    const i = MENU_YS.findIndex(my => y >= my - 4 && y < my + 14);
+    if (i >= 0) { if (menuSel === i) action(); else { menuSel = i; sfx.blip(); } }
+    return;
+  }
+  action();
+});
+const btn = (id, f) => document.getElementById(id).addEventListener('click', e => { e.currentTarget.blur(); audio(); f(); });
+btn('newCpu', () => openSelect('you'));
+btn('new2', () => openSelect('p1'));
+btn('newPrac', () => openSelect('prac'));
+btn('menuBtn', () => openMenu());
+btn('unlock', () => { if (!beaten.includes('all')) beaten.push('all'); store.set('beaten', beaten); if (state === 'select' && selMode === 'cpu') return; openSelect('cpu'); });
+const muteBtn = document.getElementById('mute');
+function toggleMute() { muted = !muted; if (muted) rollStop(); syncMusic(true); muteBtn.textContent = muted ? 'Sound off' : 'Sound on'; muteBtn.setAttribute('aria-pressed', String(muted)); }
+muteBtn.addEventListener('click', e => { e.currentTarget.blur(); toggleMute(); });
+document.querySelectorAll('input[name=speed]').forEach(r => {
+  if (Number(r.value) === meterPeriod) r.checked = true;
+  r.addEventListener('change', () => { meterPeriod = Number(r.value); r.blur(); store.set('speed', meterPeriod); });
+});
+
+// ---------- loop ----------
+startDemo();
+let last = performance.now(), acc = 0;
+function frame(now) {
+  acc += Math.min(0.25, (now - last) / 1000); last = now;
+  while (acc >= DT) { update(); acc -= DT; }
+  render();
+  requestAnimationFrame(frame);
+}
+function fit() {
+  const box = document.getElementById('screen').clientWidth - 8;
+  const s = Math.max(1, Math.floor(box / W));
+  cv.style.width = (box >= W * 2 ? W * s : box) + 'px';
+}
+window.addEventListener('resize', fit); fit();
+requestAnimationFrame(frame);
+window.__lanes = { set auto(v) { autoPlay = v; }, sprites, tick: n => { for (let i = 0; i < n; i++) update(); }, get frameIdx() { return frameIdx; }, get winner() { return winner; }, get state() { return state; }, T, cam, get players() { return players; }, startMatch, openSelect, action, horizontal, vertical, startDemo, BOWLERS, get banner() { return banner; } };
+
+})();
+</script>
+</body>
+</html>
